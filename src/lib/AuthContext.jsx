@@ -1,61 +1,41 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
-const AuthContext = createContext(null)
+const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true)
-  const [authError, setAuthError] = useState(null)
+  const [user, setUser] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
-    let mounted = true
+    try {
+      const storedUser = localStorage.getItem("epsy_user");
 
-    async function hydrate() {
-      try {
-        setIsLoadingAuth(true)
-        setAuthError(null)
-
-        const { data, error } = await supabase.auth.getSession()
-        if (error) throw error
-
-        const sessionUser = data?.session?.user ?? null
-
-        if (!mounted) return
-        setUser(sessionUser)
-        setIsAuthenticated(!!sessionUser)
-        setIsLoadingAuth(false)
-      } catch (e) {
-        if (!mounted) return
-        setUser(null)
-        setIsAuthenticated(false)
-        setIsLoadingAuth(false)
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        setIsAuthenticated(true);
+        setAuthError(null);
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
         setAuthError({
-          type: 'auth_error',
-          message: e?.message || 'Authentication error',
-        })
+          type: "auth_required",
+          message: "Authentication required",
+        });
       }
+    } catch (e) {
+      setUser(null);
+      setIsAuthenticated(false);
+      setAuthError({
+        type: "auth_error",
+        message: e?.message || "Authentication error",
+      });
+    } finally {
+      setIsLoadingAuth(false);
     }
-
-    hydrate()
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return
-      const sessionUser = session?.user ?? null
-      setUser(sessionUser)
-      setIsAuthenticated(!!sessionUser)
-      setAuthError(sessionUser ? null : {
-        type: 'auth_required',
-        message: 'Authentication required'
-      })
-    })
-
-    return () => {
-      mounted = false
-      sub?.subscription?.unsubscribe?.()
-    }
-  }, [])
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -64,20 +44,27 @@ export function AuthProvider({ children }) {
       isLoadingAuth,
       authError,
       logout: async () => {
-        await supabase.auth.signOut()
+        localStorage.removeItem("epsy_user");
+        setUser(null);
+        setIsAuthenticated(false);
+        setAuthError({
+          type: "auth_required",
+          message: "Authentication required",
+        });
+        window.location.href = "/";
       },
       navigateToLogin: () => {
-        window.location.href = '/'
+        window.location.href = "/";
       },
     }),
     [user, isAuthenticated, isLoadingAuth, authError]
-  )
+  );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within an AuthProvider')
-  return ctx
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
+  return ctx;
 }
