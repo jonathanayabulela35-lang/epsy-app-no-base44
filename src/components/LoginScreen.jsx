@@ -44,7 +44,8 @@ export default function LoginScreen() {
 
       localStorage.setItem("epsy_user", JSON.stringify(data.student));
 
-      navigate("/", { replace: true });
+      // Force a full reload so AuthContext re-checks localStorage
+      window.location.href = "/";
     } catch (err) {
       setError(err?.message || "Login failed");
     } finally {
