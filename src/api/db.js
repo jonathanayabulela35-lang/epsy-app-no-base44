@@ -1,20 +1,17 @@
 import { supabase } from '@/lib/supabaseClient'
 
-// NOTE:
-// These helpers assume your Supabase tables are named exactly like your entity schemas:
-// Challenge, ChallengeDay, StudentProgress, School, SchoolPlan, StudentCredential, etc.
-// If your table names are snake_case (e.g. challenges), update the TABLE constants below.
-
+// Supabase table names
+// These are the snake_case table names your app should use in Supabase.
 const TABLE = {
-  Challenge: 'Challenge',
-  ChallengeDay: 'ChallengeDay',
-  StudentProgress: 'StudentProgress',
-  School: 'School',
-  SchoolPlan: 'SchoolPlan',
-  StudentCredential: 'StudentCredential',
-  QuestionTemplate: 'QuestionTemplate',
-  DecoderContent: 'DecoderContent',
-  WordBook: 'WordBook',
+  Challenge: 'challenges',
+  ChallengeDay: 'challenge_days',
+  StudentProgress: 'student_progress',
+  School: 'schools',
+  SchoolPlan: 'school_plans',
+  StudentCredential: 'student_accounts',
+  QuestionTemplate: 'question_templates',
+  DecoderContent: 'decoder_contents',
+  WordBook: 'word_bookmarks',
 }
 
 async function singleOrNull(q) {
@@ -70,7 +67,6 @@ export async function getStudentProgress({ userId, challengeId }) {
 }
 
 export async function upsertStudentProgress(progress) {
-  // Expect progress to include: linked_user_id, challenge_id, ...
   const { data, error } = await supabase
     .from(TABLE.StudentProgress)
     .upsert(progress)

@@ -25,16 +25,21 @@ export default function LoginScreen() {
         throw new Error("Please enter your username and PIN.");
       }
 
-      const email = `${cleanUsername}@epsy.invalid`;
-
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password: cleanPin,
+      const { data, error: fnError } = await supabase.functions.invoke("login-with-pin", {
+        body: {
+          username: cleanUsername,
+          pin: cleanPin,
+        },
       });
 
-      if (signInError) throw signInError;
+      if (fnError) {
+        throw new Error(fnError.message || "Login failed.");
+      }
 
-      // If login succeeds, AuthContext will update via onAuthStateChange.
+      if (!data?.success) {
+        throw new Error(data?.error || "Login failed.");
+      }
+
       navigate("/", { replace: true });
     } catch (err) {
       setError(err?.message || "Login failed");
@@ -62,7 +67,7 @@ export default function LoginScreen() {
               <Input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="e.g. Kimberley"
+                placeholder="e.g. testuser"
                 autoComplete="username"
               />
             </div>

@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabaseClient'
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null) // Supabase user object
+  const [user, setUser] = useState(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoadingAuth, setIsLoadingAuth] = useState(true)
   const [authError, setAuthError] = useState(null)
@@ -31,7 +31,10 @@ export function AuthProvider({ children }) {
         setUser(null)
         setIsAuthenticated(false)
         setIsLoadingAuth(false)
-        setAuthError({ type: 'auth_error', message: e?.message || 'Authentication error' })
+        setAuthError({
+          type: 'auth_error',
+          message: e?.message || 'Authentication error',
+        })
       }
     }
 
@@ -42,7 +45,10 @@ export function AuthProvider({ children }) {
       const sessionUser = session?.user ?? null
       setUser(sessionUser)
       setIsAuthenticated(!!sessionUser)
-      setAuthError(sessionUser ? null : { type: 'auth_required', message: 'Authentication required' })
+      setAuthError(sessionUser ? null : {
+        type: 'auth_required',
+        message: 'Authentication required'
+      })
     })
 
     return () => {
@@ -60,9 +66,8 @@ export function AuthProvider({ children }) {
       logout: async () => {
         await supabase.auth.signOut()
       },
-      // This now becomes a front-end navigation concern (React Router)
       navigateToLogin: () => {
-        window.location.href = '/login'
+        window.location.href = '/'
       },
     }),
     [user, isAuthenticated, isLoadingAuth, authError]
