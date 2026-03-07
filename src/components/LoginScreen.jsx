@@ -85,7 +85,7 @@ export default function LoginScreen() {
                 onChange={(e) => setPin(e.target.value)}
                 placeholder="••••••"
                 inputMode="numeric"
-                autoComplete="current-password"
+                autoComplete="off"
               />
             </div>
 
