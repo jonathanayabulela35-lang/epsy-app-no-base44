@@ -31,6 +31,8 @@ export default function LoginScreen() {
           pin: cleanPin,
         },
       });
+     
+      console.log("login result:", data, fnError);
 
       if (fnError) {
         throw new Error(fnError.message || "Login failed.");
