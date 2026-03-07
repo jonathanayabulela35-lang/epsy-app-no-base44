@@ -31,7 +31,7 @@ export default function LoginScreen() {
           pin: cleanPin,
         },
       });
-     
+
       console.log("login result:", data, fnError);
 
       if (fnError) {
@@ -41,6 +41,8 @@ export default function LoginScreen() {
       if (!data?.success) {
         throw new Error(data?.error || "Login failed.");
       }
+
+      localStorage.setItem("epsy_user", JSON.stringify(data.student));
 
       navigate("/", { replace: true });
     } catch (err) {
