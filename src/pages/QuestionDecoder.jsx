@@ -143,21 +143,39 @@ export default function QuestionDecoder() {
             </Section>
 
             <Section title="Question Structure">
-              <pre className="whitespace-pre-wrap text-[#2E5C6E]">
-                {JSON.stringify(current?.question_structure ?? [], null, 2)}
-              </pre>
+              {Array.isArray(current?.question_structure) && current.question_structure.length > 0 ? (
+                <ul className="list-disc pl-5 text-[#2E5C6E] space-y-2">
+                  {current.question_structure.map((item, index) => (
+                    <li key={index}>{typeof item === "string" ? item : JSON.stringify(item)}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[#2E5C6E]">No question structure added.</p>
+              )}
             </Section>
 
             <Section title="How to Respond">
-              <pre className="whitespace-pre-wrap text-[#2E5C6E]">
-                {JSON.stringify(current?.how_to_respond ?? [], null, 2)}
-              </pre>
+              {Array.isArray(current?.how_to_respond) && current.how_to_respond.length > 0 ? (
+                <ul className="list-disc pl-5 text-[#2E5C6E] space-y-2">
+                  {current.how_to_respond.map((item, index) => (
+                    <li key={index}>{typeof item === "string" ? item : JSON.stringify(item)}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[#2E5C6E]">No response guidance added.</p>
+              )}
             </Section>
 
             <Section title="How to Remember">
-              <pre className="whitespace-pre-wrap text-[#2E5C6E]">
-                {JSON.stringify(current?.how_to_remember ?? [], null, 2)}
-              </pre>
+              {Array.isArray(current?.how_to_remember) && current.how_to_remember.length > 0 ? (
+                <ul className="list-disc pl-5 text-[#2E5C6E] space-y-2">
+                  {current.how_to_remember.map((item, index) => (
+                    <li key={index}>{typeof item === "string" ? item : JSON.stringify(item)}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[#2E5C6E]">No memory guidance added.</p>
+              )}
             </Section>
 
             <Section title="Common Traps">
@@ -193,7 +211,7 @@ export default function QuestionDecoder() {
                         {item.question || `Example ${index + 1}`}
                       </p>
                       <p className="text-[#2E5C6E] mt-2">
-                        {item.breakdown || JSON.stringify(item)}
+                        {item.breakdown || ""}
                       </p>
                     </div>
                   ))

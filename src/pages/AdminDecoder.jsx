@@ -8,54 +8,78 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
+const emptyInstructionWord = {
+  word: "",
+  meaning: "",
+  required: "",
+  example: "",
+};
+
+const emptyPastPaperExample = {
+  question: "",
+  breakdown: "",
+};
+
 const emptyForm = {
   id: null,
   subject: "",
-  instruction_words_text: "",
-  question_structure_text: "",
-  how_to_respond_text: "",
-  how_to_remember_text: "",
-  common_traps_text: "",
-  watch_for_text: "",
-  past_paper_examples_text: "",
+  instruction_words: [emptyInstructionWord],
+  question_structure: "",
+  how_to_respond: "",
+  how_to_remember: "",
+  common_traps: [""],
+  watch_for: [""],
+  past_paper_examples: [emptyPastPaperExample],
   published: false,
 };
 
-function parseLinesToArray(text) {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function safeParseJson(text, fallback = []) {
-  if (!text.trim()) return fallback;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return fallback;
-  }
-}
-
-function stringifyJson(value, fallback = "[]") {
-  try {
-    return JSON.stringify(value ?? JSON.parse(fallback), null, 2);
-  } catch {
-    return fallback;
-  }
+function normalizeStringArray(arr) {
+  return (arr || []).map((item) => (typeof item === "string" ? item : "")).filter((item) => item.trim() !== "");
 }
 
 function mapDecoderToForm(item) {
   return {
     id: item.id,
     subject: item.subject ?? "",
-    instruction_words_text: stringifyJson(item.instruction_words, "[]"),
-    question_structure_text: stringifyJson(item.question_structure, "[]"),
-    how_to_respond_text: stringifyJson(item.how_to_respond, "[]"),
-    how_to_remember_text: stringifyJson(item.how_to_remember, "[]"),
-    common_traps_text: stringifyJson(item.common_traps, "[]"),
-    watch_for_text: stringifyJson(item.watch_for, "[]"),
-    past_paper_examples_text: stringifyJson(item.past_paper_examples, "[]"),
+    instruction_words:
+      Array.isArray(item.instruction_words) && item.instruction_words.length > 0
+        ? item.instruction_words.map((word) => ({
+            word: word.word ?? "",
+            meaning: word.meaning ?? "",
+            required: word.required ?? "",
+            example: word.example ?? "",
+          }))
+        : [emptyInstructionWord],
+    question_structure: Array.isArray(item.question_structure)
+      ? item.question_structure.join("\n")
+      : typeof item.question_structure === "string"
+      ? item.question_structure
+      : "",
+    how_to_respond: Array.isArray(item.how_to_respond)
+      ? item.how_to_respond.join("\n")
+      : typeof item.how_to_respond === "string"
+      ? item.how_to_respond
+      : "",
+    how_to_remember: Array.isArray(item.how_to_remember)
+      ? item.how_to_remember.join("\n")
+      : typeof item.how_to_remember === "string"
+      ? item.how_to_remember
+      : "",
+    common_traps:
+      Array.isArray(item.common_traps) && item.common_traps.length > 0
+        ? item.common_traps.map((trap) => (typeof trap === "string" ? trap : ""))
+        : [""],
+    watch_for:
+      Array.isArray(item.watch_for) && item.watch_for.length > 0
+        ? item.watch_for.map((watch) => (typeof watch === "string" ? watch : ""))
+        : [""],
+    past_paper_examples:
+      Array.isArray(item.past_paper_examples) && item.past_paper_examples.length > 0
+        ? item.past_paper_examples.map((example) => ({
+            question: example.question ?? "",
+            breakdown: example.breakdown ?? "",
+          }))
+        : [emptyPastPaperExample],
     published: !!item.published,
   };
 }
@@ -63,13 +87,34 @@ function mapDecoderToForm(item) {
 function buildPayload(form) {
   return {
     subject: form.subject.trim(),
-    instruction_words: safeParseJson(form.instruction_words_text, []),
-    question_structure: safeParseJson(form.question_structure_text, []),
-    how_to_respond: safeParseJson(form.how_to_respond_text, []),
-    how_to_remember: safeParseJson(form.how_to_remember_text, []),
-    common_traps: safeParseJson(form.common_traps_text, parseLinesToArray(form.common_traps_text)),
-    watch_for: safeParseJson(form.watch_for_text, parseLinesToArray(form.watch_for_text)),
-    past_paper_examples: safeParseJson(form.past_paper_examples_text, []),
+    instruction_words: form.instruction_words
+      .map((word) => ({
+        word: word.word.trim(),
+        meaning: word.meaning.trim(),
+        required: word.required.trim(),
+        example: word.example.trim(),
+      }))
+      .filter((word) => word.word || word.meaning || word.required || word.example),
+    question_structure: form.question_structure
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+    how_to_respond: form.how_to_respond
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+    how_to_remember: form.how_to_remember
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean),
+    common_traps: normalizeStringArray(form.common_traps),
+    watch_for: normalizeStringArray(form.watch_for),
+    past_paper_examples: form.past_paper_examples
+      .map((item) => ({
+        question: item.question.trim(),
+        breakdown: item.breakdown.trim(),
+      }))
+      .filter((item) => item.question || item.breakdown),
     published: !!form.published,
   };
 }
@@ -170,6 +215,81 @@ export default function AdminDecoder() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const updateInstructionWord = (index, field, value) => {
+    setForm((prev) => {
+      const updated = [...prev.instruction_words];
+      updated[index] = { ...updated[index], [field]: value };
+      return { ...prev, instruction_words: updated };
+    });
+  };
+
+  const addInstructionWord = () => {
+    setForm((prev) => ({
+      ...prev,
+      instruction_words: [...prev.instruction_words, { ...emptyInstructionWord }],
+    }));
+  };
+
+  const removeInstructionWord = (index) => {
+    setForm((prev) => ({
+      ...prev,
+      instruction_words:
+        prev.instruction_words.length > 1
+          ? prev.instruction_words.filter((_, i) => i !== index)
+          : [{ ...emptyInstructionWord }],
+    }));
+  };
+
+  const updateStringList = (field, index, value) => {
+    setForm((prev) => {
+      const updated = [...prev[field]];
+      updated[index] = value;
+      return { ...prev, [field]: updated };
+    });
+  };
+
+  const addStringListItem = (field) => {
+    setForm((prev) => ({
+      ...prev,
+      [field]: [...prev[field], ""],
+    }));
+  };
+
+  const removeStringListItem = (field, index) => {
+    setForm((prev) => ({
+      ...prev,
+      [field]:
+        prev[field].length > 1
+          ? prev[field].filter((_, i) => i !== index)
+          : [""],
+    }));
+  };
+
+  const updatePastPaperExample = (index, field, value) => {
+    setForm((prev) => {
+      const updated = [...prev.past_paper_examples];
+      updated[index] = { ...updated[index], [field]: value };
+      return { ...prev, past_paper_examples: updated };
+    });
+  };
+
+  const addPastPaperExample = () => {
+    setForm((prev) => ({
+      ...prev,
+      past_paper_examples: [...prev.past_paper_examples, { ...emptyPastPaperExample }],
+    }));
+  };
+
+  const removePastPaperExample = (index) => {
+    setForm((prev) => ({
+      ...prev,
+      past_paper_examples:
+        prev.past_paper_examples.length > 1
+          ? prev.past_paper_examples.filter((_, i) => i !== index)
+          : [{ ...emptyPastPaperExample }],
+    }));
+  };
+
   return (
     <div className="min-h-screen bg-[#F1F4F6] px-4 md:px-8 py-24">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -185,7 +305,7 @@ export default function AdminDecoder() {
             <CardTitle>{form.id ? "Edit Decoder Subject" : "Create Decoder Subject"}</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <Label>Subject</Label>
                 <Input
@@ -196,95 +316,139 @@ export default function AdminDecoder() {
                 />
               </div>
 
-              <div>
-                <Label>Instruction Words (JSON array)</Label>
-                <Textarea
-                  rows={8}
-                  value={form.instruction_words_text}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, instruction_words_text: e.target.value }))
-                  }
-                  placeholder={`[
-  {
-    "word": "Discuss",
-    "meaning": "Give a balanced explanation",
-    "required": "Show more than one side",
-    "example": "Discuss the causes of inflation"
-  }
-]`}
-                />
+              <div className="space-y-4">
+                <Label>Instruction Words</Label>
+                {form.instruction_words.map((word, index) => (
+                  <Card key={index} className="border-[#2E5C6E]/10">
+                    <CardContent className="pt-6 space-y-3">
+                      <Input
+                        placeholder="Instruction word"
+                        value={word.word}
+                        onChange={(e) => updateInstructionWord(index, "word", e.target.value)}
+                      />
+                      <Textarea
+                        placeholder="Meaning"
+                        value={word.meaning}
+                        onChange={(e) => updateInstructionWord(index, "meaning", e.target.value)}
+                        rows={3}
+                      />
+                      <Textarea
+                        placeholder="What is required from the student"
+                        value={word.required}
+                        onChange={(e) => updateInstructionWord(index, "required", e.target.value)}
+                        rows={3}
+                      />
+                      <Textarea
+                        placeholder="Example"
+                        value={word.example}
+                        onChange={(e) => updateInstructionWord(index, "example", e.target.value)}
+                        rows={3}
+                      />
+                      <Button type="button" variant="outline" onClick={() => removeInstructionWord(index)}>
+                        Remove Instruction Word
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+                <Button type="button" variant="outline" onClick={addInstructionWord}>
+                  Add Instruction Word
+                </Button>
               </div>
 
               <div>
-                <Label>Question Structure (JSON array or object)</Label>
+                <Label>Question Structure</Label>
                 <Textarea
+                  value={form.question_structure}
+                  onChange={(e) => setForm((prev) => ({ ...prev, question_structure: e.target.value }))}
                   rows={5}
-                  value={form.question_structure_text}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, question_structure_text: e.target.value }))
-                  }
+                  placeholder="Write one point per line"
                 />
               </div>
 
               <div>
-                <Label>How to Respond (JSON array or object)</Label>
+                <Label>How to Respond</Label>
                 <Textarea
+                  value={form.how_to_respond}
+                  onChange={(e) => setForm((prev) => ({ ...prev, how_to_respond: e.target.value }))}
                   rows={5}
-                  value={form.how_to_respond_text}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, how_to_respond_text: e.target.value }))
-                  }
+                  placeholder="Write one point per line"
                 />
               </div>
 
               <div>
-                <Label>How to Remember (JSON array or object)</Label>
+                <Label>How to Remember</Label>
                 <Textarea
+                  value={form.how_to_remember}
+                  onChange={(e) => setForm((prev) => ({ ...prev, how_to_remember: e.target.value }))}
                   rows={5}
-                  value={form.how_to_remember_text}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, how_to_remember_text: e.target.value }))
-                  }
+                  placeholder="Write one point per line"
                 />
               </div>
 
-              <div>
-                <Label>Common Traps (JSON array or one item per line)</Label>
-                <Textarea
-                  rows={5}
-                  value={form.common_traps_text}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, common_traps_text: e.target.value }))
-                  }
-                />
+              <div className="space-y-3">
+                <Label>Common Traps</Label>
+                {form.common_traps.map((item, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      value={item}
+                      onChange={(e) => updateStringList("common_traps", index, e.target.value)}
+                      placeholder="Common mistake students make"
+                    />
+                    <Button type="button" variant="outline" onClick={() => removeStringListItem("common_traps", index)}>
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" onClick={() => addStringListItem("common_traps")}>
+                  Add Common Trap
+                </Button>
               </div>
 
-              <div>
-                <Label>Watch For (JSON array or one item per line)</Label>
-                <Textarea
-                  rows={5}
-                  value={form.watch_for_text}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, watch_for_text: e.target.value }))
-                  }
-                />
+              <div className="space-y-3">
+                <Label>Watch For</Label>
+                {form.watch_for.map((item, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      value={item}
+                      onChange={(e) => updateStringList("watch_for", index, e.target.value)}
+                      placeholder="What students should notice"
+                    />
+                    <Button type="button" variant="outline" onClick={() => removeStringListItem("watch_for", index)}>
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" onClick={() => addStringListItem("watch_for")}>
+                  Add Watch For Item
+                </Button>
               </div>
 
-              <div>
-                <Label>Past Paper Examples (JSON array)</Label>
-                <Textarea
-                  rows={8}
-                  value={form.past_paper_examples_text}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, past_paper_examples_text: e.target.value }))
-                  }
-                  placeholder={`[
-  {
-    "question": "Discuss the effects of inflation",
-    "breakdown": "You must explain more than one effect clearly"
-  }
-]`}
-                />
+              <div className="space-y-4">
+                <Label>Past Paper Examples</Label>
+                {form.past_paper_examples.map((item, index) => (
+                  <Card key={index} className="border-[#2E5C6E]/10">
+                    <CardContent className="pt-6 space-y-3">
+                      <Textarea
+                        placeholder="Question"
+                        value={item.question}
+                        onChange={(e) => updatePastPaperExample(index, "question", e.target.value)}
+                        rows={3}
+                      />
+                      <Textarea
+                        placeholder="Breakdown / explanation"
+                        value={item.breakdown}
+                        onChange={(e) => updatePastPaperExample(index, "breakdown", e.target.value)}
+                        rows={4}
+                      />
+                      <Button type="button" variant="outline" onClick={() => removePastPaperExample(index)}>
+                        Remove Example
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+                <Button type="button" variant="outline" onClick={addPastPaperExample}>
+                  Add Past Paper Example
+                </Button>
               </div>
 
               <div className="flex items-center gap-3">
