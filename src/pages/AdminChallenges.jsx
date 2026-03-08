@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 
 const emptyForm = {
   id: null,
@@ -438,7 +439,7 @@ export default function AdminChallenges() {
                     </Button>
 
                     <Button asChild variant="outline">
-                      <Link to={`/AdminChallengeDays?challengeId=${challenge.id}`}>
+                      <Link to={`${createPageUrl("AdminChallengeDays")}?challengeId=${challenge.id}`}>
                         Days
                       </Link>
                     </Button>
