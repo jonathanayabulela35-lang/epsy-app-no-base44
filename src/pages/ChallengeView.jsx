@@ -68,6 +68,7 @@ export default function ChallengeView() {
   const [showEditCodeNameDialog, setShowEditCodeNameDialog] = useState(false);
   const [codeName, setCodeName] = useState('');
   const [editCodeName, setEditCodeName] = useState('');
+  const [uiError, setUiError] = useState('');
 
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -79,7 +80,7 @@ export default function ChallengeView() {
 
   const userId = user?.id;
 
-  const { data: challenge } = useQuery({
+  const { data: challenge, isLoading: challengeLoading } = useQuery({
     queryKey: ['challenge', challengeId],
     queryFn: () => getChallengeById(challengeId),
     enabled: !!challengeId,
@@ -101,17 +102,29 @@ export default function ChallengeView() {
 
   const startMutation = useMutation({
     mutationFn: (data) => upsertStudentProgress(data),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      console.log('startMutation success:', result);
       queryClient.invalidateQueries({ queryKey: ['progress', challengeId, userId] });
       setShowCodeNameDialog(false);
       setCodeName('');
+      setUiError('');
+    },
+    onError: (error) => {
+      console.error('startMutation error:', error);
+      setUiError(error?.message || 'Failed to start journey.');
     },
   });
 
   const updateProgressMutation = useMutation({
     mutationFn: (data) => upsertStudentProgress(data),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      console.log('updateProgressMutation success:', result);
       queryClient.invalidateQueries({ queryKey: ['progress', challengeId, userId] });
+      setUiError('');
+    },
+    onError: (error) => {
+      console.error('updateProgressMutation error:', error);
+      setUiError(error?.message || 'Failed to update progress.');
     },
   });
 
@@ -129,11 +142,23 @@ export default function ChallengeView() {
   }
 
   const handleStart = () => {
+    setUiError('');
     setShowCodeNameDialog(true);
   };
 
   const confirmStart = () => {
-    if (!codeName.trim() || !userId || !challengeId) return;
+    console.log('confirmStart fired');
+    console.log('codeName:', codeName);
+    console.log('userId:', userId);
+    console.log('challengeId:', challengeId);
+
+    if (!codeName.trim() || !userId || !challengeId) {
+      console.log('confirmStart stopped because one required value is missing');
+      setUiError('Missing code name, student id, or challenge id.');
+      return;
+    }
+
+    console.log('Starting mutation now...');
 
     startMutation.mutate({
       user_id: userId,
@@ -166,6 +191,7 @@ export default function ChallengeView() {
   };
 
   const handleEditCodeName = () => {
+    setUiError('');
     setEditCodeName(progress?.code_name || '');
     setShowEditCodeNameDialog(true);
   };
@@ -190,7 +216,7 @@ export default function ChallengeView() {
     { key: 'full', label: 'Full Breakdown', content: challenge?.full_breakdown },
   ];
 
-  if (!challenge) {
+  if (challengeLoading || !challenge) {
     return <div className="p-8">Loading...</div>;
   }
 
@@ -231,6 +257,12 @@ export default function ChallengeView() {
             </DropdownMenu>
           )}
         </div>
+
+        {uiError && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {uiError}
+          </div>
+        )}
 
         <div className="space-y-3 mb-8">
           {sections.map((section) => section.content && (
