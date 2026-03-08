@@ -17,6 +17,8 @@ const emptyForm = {
 export default function AdminSchools() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(emptyForm);
+  const [uiError, setUiError] = useState("");
+  const [uiSuccess, setUiSuccess] = useState("");
 
   const {
     data: schools = [],
@@ -45,6 +47,8 @@ export default function AdminSchools() {
         status: currentForm.status || "active",
       };
 
+      console.log("Saving school payload:", payload);
+
       if (currentForm.id) {
         const { data, error } = await supabase
           .from("schools")
@@ -66,18 +70,52 @@ export default function AdminSchools() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("School save success:", data);
+      setUiError("");
+      setUiSuccess("School saved successfully.");
       queryClient.invalidateQueries({ queryKey: ["admin-schools"] });
       setForm(emptyForm);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    onError: (error) => {
+      console.error("School save error:", error);
+      setUiSuccess("");
+      setUiError(error?.message || "Failed to save school.");
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => {
+      const { error } = await supabase
+        .from("schools")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setUiError("");
+      setUiSuccess("School deleted successfully.");
+      queryClient.invalidateQueries({ queryKey: ["admin-schools"] });
+    },
+    onError: (error) => {
+      console.error("School delete error:", error);
+      setUiSuccess("");
+      setUiError(error?.message || "Failed to delete school.");
     },
   });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setUiError("");
+    setUiSuccess("");
     await saveMutation.mutateAsync(form);
   };
 
   const editSchool = (school) => {
+    setUiError("");
+    setUiSuccess("");
     setForm({
       id: school.id,
       name: school.name ?? "",
@@ -86,6 +124,7 @@ export default function AdminSchools() {
       seats_generated: school.seats_generated ?? 0,
       status: school.status ?? "active",
     });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
@@ -97,6 +136,18 @@ export default function AdminSchools() {
             Create and manage school records and seat counts.
           </p>
         </div>
+
+        {uiError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {uiError}
+          </div>
+        )}
+
+        {uiSuccess && (
+          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            {uiSuccess}
+          </div>
+        )}
 
         <Card className="border-[#2E5C6E]/15">
           <CardHeader>
@@ -168,7 +219,11 @@ export default function AdminSchools() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setForm(emptyForm)}
+                  onClick={() => {
+                    setForm(emptyForm);
+                    setUiError("");
+                    setUiSuccess("");
+                  }}
                 >
                   Clear
                 </Button>
@@ -197,12 +252,28 @@ export default function AdminSchools() {
                   </p>
                 </div>
 
-                <Button variant="outline" onClick={() => editSchool(school)}>
-                  Edit
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => editSchool(school)}>
+                    Edit
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => deleteMutation.mutate(school.id)}
+                  >
+                    Delete
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
+
+          {!isLoading && schools.length === 0 && (
+            <Card>
+              <CardContent className="py-8 text-[#2E5C6E]">
+                No schools yet.
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
