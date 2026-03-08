@@ -22,6 +22,8 @@ const emptyForm = {
 export default function AdminStudentAccess() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(emptyForm);
+  const [uiError, setUiError] = useState("");
+  const [uiSuccess, setUiSuccess] = useState("");
 
   const {
     data: studentAccounts = [],
@@ -33,7 +35,7 @@ export default function AdminStudentAccess() {
       const { data, error } = await supabase
         .from("student_accounts")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order("username", { ascending: true });
 
       if (error) throw error;
       return data ?? [];
@@ -89,9 +91,14 @@ export default function AdminStudentAccess() {
       return data;
     },
     onSuccess: () => {
+      setUiError("");
+      setUiSuccess("Account saved successfully.");
       queryClient.invalidateQueries({ queryKey: ["admin-student-accounts"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-schools"] });
       setForm(emptyForm);
+    },
+    onError: (error) => {
+      setUiSuccess("");
+      setUiError(error?.message || "Failed to save account.");
     },
   });
 
@@ -105,10 +112,14 @@ export default function AdminStudentAccess() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setUiError("");
+    setUiSuccess("");
     await saveMutation.mutateAsync(form);
   };
 
   const editStudent = (student) => {
+    setUiError("");
+    setUiSuccess("");
     setForm({
       id: student.id,
       username: student.username ?? "",
@@ -134,6 +145,18 @@ export default function AdminStudentAccess() {
             Create and manage student and admin accounts, grades, and access settings.
           </p>
         </div>
+
+        {uiError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {uiError}
+          </div>
+        )}
+
+        {uiSuccess && (
+          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            {uiSuccess}
+          </div>
+        )}
 
         <Card className="border-[#2E5C6E]/15">
           <CardHeader>
@@ -255,7 +278,11 @@ export default function AdminStudentAccess() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setForm(emptyForm)}
+                  onClick={() => {
+                    setForm(emptyForm);
+                    setUiError("");
+                    setUiSuccess("");
+                  }}
                 >
                   Clear
                 </Button>
