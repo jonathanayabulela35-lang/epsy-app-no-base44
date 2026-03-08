@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, ChevronDown, ChevronRight, Check, MoreVertical } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -28,21 +27,56 @@ import {
   upsertStudentProgress,
 } from '@/api/db';
 
+function normalizeExecutionOverview(executionOverview = []) {
+  return executionOverview.map((step, index) => {
+    if (typeof step === "string") {
+      const match = step.match(/^day\s*(\d+)\s*[-:]\s*(.*)$/i);
+      if (match) {
+        return {
+          day: Number(match[1]),
+          label: match[2]?.trim() || `Day ${match[1]}`,
+        };
+      }
+
+      return {
+        day: index + 1,
+        label: step,
+      };
+    }
+
+    if (step && typeof step === "object") {
+      return {
+        day: Number(step.day) || index + 1,
+        label: step.label || `Day ${Number(step.day) || index + 1}`,
+      };
+    }
+
+    return {
+      day: index + 1,
+      label: `Day ${index + 1}`,
+    };
+  });
+}
+
 export default function ChallengeView() {
   const urlParams = new URLSearchParams(window.location.search);
   const challengeId = urlParams.get('id');
+
   const [expandedSection, setExpandedSection] = useState(null);
   const [selectedDay, setSelectedDay] = useState(null);
   const [showCodeNameDialog, setShowCodeNameDialog] = useState(false);
   const [showEditCodeNameDialog, setShowEditCodeNameDialog] = useState(false);
   const [codeName, setCodeName] = useState('');
   const [editCodeName, setEditCodeName] = useState('');
-  const [showNotesDialog, setShowNotesDialog] = useState(false);
-  const [notes, setNotes] = useState('');
-  const queryClient = useQueryClient();
 
+  const queryClient = useQueryClient();
   const { user } = useAuth();
-  const userRole = user?.user_metadata?.role || user?.app_metadata?.role;
+
+  const userRole =
+    user?.role ||
+    user?.user_metadata?.role ||
+    user?.app_metadata?.role;
+
   const userId = user?.id;
 
   const { data: challenge } = useQuery({
@@ -53,6 +87,39 @@ export default function ChallengeView() {
     refetchOnWindowFocus: true,
   });
 
+  const { data: days = [] } = useQuery({
+    queryKey: ['challenge-days', challengeId],
+    queryFn: () => listChallengeDays(challengeId),
+    enabled: !!challengeId,
+  });
+
+  const { data: progress } = useQuery({
+    queryKey: ['progress', challengeId, userId],
+    queryFn: () => getStudentProgress({ userId, challengeId }),
+    enabled: !!challengeId && !!userId,
+  });
+
+  const startMutation = useMutation({
+    mutationFn: (data) => upsertStudentProgress(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['progress', challengeId, userId] });
+      setShowCodeNameDialog(false);
+      setCodeName('');
+    },
+  });
+
+  const updateProgressMutation = useMutation({
+    mutationFn: (data) => upsertStudentProgress(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['progress', challengeId, userId] });
+    },
+  });
+
+  const executionSteps = useMemo(
+    () => normalizeExecutionOverview(challenge?.execution_overview || []),
+    [challenge?.execution_overview]
+  );
+
   // Block school_admin from student pages
   if (userRole === 'school_admin') {
     return (
@@ -62,43 +129,17 @@ export default function ChallengeView() {
     );
   }
 
-  const { data: days = [] } = useQuery({
-    queryKey: ['challenge-days', challengeId],
-    queryFn: () => listChallengeDays(challengeId),
-    enabled: !!challengeId,
-  });
-
-  const { data: progress } = useQuery({
-    queryKey: ['progress', challengeId],
-    queryFn: () => getStudentProgress({ userId, challengeId }),
-    enabled: !!challengeId && !!userId,
-  });
-
-  const startMutation = useMutation({
-    mutationFn: (data) => upsertStudentProgress(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['progress', challengeId] });
-      setShowCodeNameDialog(false);
-    },
-  });
-
-  const updateProgressMutation = useMutation({
-    mutationFn: (data) => upsertStudentProgress(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['progress', challengeId] });
-    },
-  });
-
   const handleStart = () => {
     setShowCodeNameDialog(true);
   };
 
   const confirmStart = () => {
-    if (!codeName.trim()) return;
+    if (!codeName.trim() || !userId || !challengeId) return;
+
     startMutation.mutate({
       linked_user_id: userId,
       challenge_id: challengeId,
-      code_name: codeName,
+      code_name: codeName.trim(),
       current_day: 1,
       completed_days: [],
       started_date: new Date().toISOString(),
@@ -108,22 +149,21 @@ export default function ChallengeView() {
 
   const handleDayComplete = (dayNumber) => {
     if (!progress) return;
-    const completedDays = [...(progress.completed_days || []), dayNumber];
+
+    const existingCompleted = Array.isArray(progress.completed_days)
+      ? progress.completed_days
+      : [];
+
+    const completedDays = existingCompleted.includes(dayNumber)
+      ? existingCompleted
+      : [...existingCompleted, dayNumber];
+
     updateProgressMutation.mutate({
       ...progress,
       completed_days: completedDays,
       current_day: dayNumber + 1,
       last_accessed: new Date().toISOString(),
     });
-  };
-
-  const handleSaveNotes = () => {
-    if (!progress) return;
-    updateProgressMutation.mutate({
-      ...progress,
-      personal_notes: notes,
-    });
-    setShowNotesDialog(false);
   };
 
   const handleEditCodeName = () => {
@@ -133,10 +173,13 @@ export default function ChallengeView() {
 
   const handleSaveCodeName = () => {
     if (!progress || !editCodeName.trim()) return;
+
     updateProgressMutation.mutate({
       ...progress,
-      code_name: editCodeName,
+      code_name: editCodeName.trim(),
+      last_accessed: new Date().toISOString(),
     });
+
     setShowEditCodeNameDialog(false);
   };
 
@@ -166,7 +209,6 @@ export default function ChallengeView() {
           </Link>
         </div>
 
-        {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <span className="text-5xl">{challenge.icon}</span>
           <div className="flex-1">
@@ -191,7 +233,6 @@ export default function ChallengeView() {
           )}
         </div>
 
-        {/* Sections */}
         <div className="space-y-3 mb-8">
           {sections.map((section) => section.content && (
             <Card key={section.key} className="bg-white border-[#2E5C6E]/20">
@@ -201,9 +242,14 @@ export default function ChallengeView() {
               >
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-[#1E1E1E] text-base">{section.label}</CardTitle>
-                  <ChevronDown className={`w-5 h-5 text-[#2E5C6E] transition-transform ${expandedSection === section.key ? 'rotate-180' : ''}`} />
+                  <ChevronDown
+                    className={`w-5 h-5 text-[#2E5C6E] transition-transform ${
+                      expandedSection === section.key ? 'rotate-180' : ''
+                    }`}
+                  />
                 </div>
               </CardHeader>
+
               <AnimatePresence>
                 {expandedSection === section.key && (
                   <motion.div
@@ -212,7 +258,9 @@ export default function ChallengeView() {
                     exit={{ height: 0, opacity: 0 }}
                   >
                     <CardContent className="pt-0">
-                      <p className="text-[#1E1E1E] leading-relaxed whitespace-pre-wrap">{section.content}</p>
+                      <p className="text-[#1E1E1E] leading-relaxed whitespace-pre-wrap">
+                        {section.content}
+                      </p>
                     </CardContent>
                   </motion.div>
                 )}
@@ -221,7 +269,6 @@ export default function ChallengeView() {
           ))}
         </div>
 
-        {/* Daily Execution */}
         <Card className="bg-white border-[#2E5C6E]/20 mb-6">
           <CardHeader>
             <CardTitle className="text-[#1E1E1E]">Daily Execution</CardTitle>
@@ -230,13 +277,20 @@ export default function ChallengeView() {
             {!progress ? (
               <div className="text-center py-8">
                 <p className="text-[#2E5C6E] mb-4">Ready to start this journey?</p>
-                <Button onClick={handleStart} className="bg-[#0CC0DF] hover:bg-[#0AB0CF] text-white">
+                <Button
+                  onClick={handleStart}
+                  className="bg-[#0CC0DF] hover:bg-[#0AB0CF] text-white"
+                >
                   Start Challenge
                 </Button>
               </div>
+            ) : executionSteps.length === 0 ? (
+              <div className="text-center py-6 text-[#2E5C6E]">
+                No execution steps have been added for this challenge yet.
+              </div>
             ) : (
               <div className="space-y-3">
-                {challenge.execution_overview?.map((step) => (
+                {executionSteps.map((step) => (
                   <div
                     key={step.day}
                     className={`p-3 rounded-lg border cursor-pointer transition-all ${
@@ -265,16 +319,16 @@ export default function ChallengeView() {
           </CardContent>
         </Card>
 
-        {/* Thought Offering */}
         {challenge.thought_offering && (
           <Card className="bg-[#FAFBF9] border-[#C6A85E]/30">
             <CardContent className="p-6">
-              <p className="text-[#1E1E1E] italic leading-relaxed">{challenge.thought_offering}</p>
+              <p className="text-[#1E1E1E] italic leading-relaxed">
+                {challenge.thought_offering}
+              </p>
             </CardContent>
           </Card>
         )}
 
-        {/* Code Name Dialog */}
         <Dialog open={showCodeNameDialog} onOpenChange={setShowCodeNameDialog}>
           <DialogContent className="bg-white">
             <DialogHeader>
@@ -289,14 +343,17 @@ export default function ChallengeView() {
                 onChange={(e) => setCodeName(e.target.value)}
                 placeholder="e.g., Project Shield, Level Up"
               />
-              <Button onClick={confirmStart} className="w-full bg-[#0CC0DF] hover:bg-[#0AB0CF] text-white">
-                Start Journey
+              <Button
+                onClick={confirmStart}
+                disabled={startMutation.isPending}
+                className="w-full bg-[#0CC0DF] hover:bg-[#0AB0CF] text-white"
+              >
+                {startMutation.isPending ? "Starting..." : "Start Journey"}
               </Button>
             </div>
           </DialogContent>
         </Dialog>
 
-        {/* Edit Code Name Dialog */}
         <Dialog open={showEditCodeNameDialog} onOpenChange={setShowEditCodeNameDialog}>
           <DialogContent className="bg-white">
             <DialogHeader>
@@ -311,57 +368,70 @@ export default function ChallengeView() {
                 onChange={(e) => setEditCodeName(e.target.value)}
                 placeholder="e.g., Project Shield, Level Up"
               />
-              <Button onClick={handleSaveCodeName} className="w-full bg-[#0CC0DF] hover:bg-[#0AB0CF] text-white">
+              <Button
+                onClick={handleSaveCodeName}
+                disabled={updateProgressMutation.isPending}
+                className="w-full bg-[#0CC0DF] hover:bg-[#0AB0CF] text-white"
+              >
                 Save Code Name
               </Button>
             </div>
           </DialogContent>
         </Dialog>
 
-        {/* Day Detail Dialog */}
         <Dialog open={!!selectedDay} onOpenChange={() => setSelectedDay(null)}>
           <DialogContent className="bg-white max-w-2xl max-h-[90vh] overflow-y-auto">
-            {selectedDay && days.find(d => d.day_number === selectedDay) && (
+            {selectedDay && days.find((d) => d.day_number === selectedDay) && (
               <>
                 <DialogHeader>
                   <DialogTitle className="text-black">Day {selectedDay}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
                   {(() => {
-                    const day = days.find(d => d.day_number === selectedDay);
+                    const day = days.find((d) => d.day_number === selectedDay);
                     return (
                       <>
                         <div>
                           <h4 className="font-medium text-[#1E1E1E] mb-2">Goal</h4>
                           <p className="text-[#2E5C6E] leading-relaxed">{day.goal}</p>
                         </div>
+
                         <div>
                           <h4 className="font-medium text-[#1E1E1E] mb-2">Today's Task</h4>
                           <p className="text-[#1E1E1E] leading-relaxed">{day.daily_task}</p>
                         </div>
+
                         {day.example && (
                           <div>
                             <h4 className="font-medium text-[#1E1E1E] mb-2">Example</h4>
                             <p className="text-[#2E5C6E] leading-relaxed">{day.example}</p>
                           </div>
                         )}
+
                         {day.deeper_explanation && (
                           <details className="border border-[#2E5C6E]/20 rounded-lg p-4">
-                            <summary className="font-medium text-[#1E1E1E] cursor-pointer">Deeper Explanation</summary>
-                            <p className="text-[#2E5C6E] mt-3 leading-relaxed">{day.deeper_explanation}</p>
+                            <summary className="font-medium text-[#1E1E1E] cursor-pointer">
+                              Deeper Explanation
+                            </summary>
+                            <p className="text-[#2E5C6E] mt-3 leading-relaxed">
+                              {day.deeper_explanation}
+                            </p>
                           </details>
                         )}
+
                         {day.thought_offering && (
                           <div className="bg-[#FAFBF9] p-4 rounded-lg border border-[#C6A85E]/30">
                             <p className="text-[#1E1E1E] italic">{day.thought_offering}</p>
                           </div>
                         )}
+
                         {progress && !progress.completed_days?.includes(selectedDay) && (
                           <Button
                             onClick={() => {
                               handleDayComplete(selectedDay);
                               setSelectedDay(null);
                             }}
+                            disabled={updateProgressMutation.isPending}
                             className="w-full bg-[#0CC0DF] hover:bg-[#0AB0CF] text-white"
                           >
                             Mark Complete
