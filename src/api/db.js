@@ -1,7 +1,6 @@
 import { supabase } from '@/lib/supabaseClient'
 
 // Supabase table names
-// These are the snake_case table names your app should use in Supabase.
 const TABLE = {
   Challenge: 'challenges',
   ChallengeDay: 'challenge_days',
@@ -33,17 +32,20 @@ export async function listPublishedChallenges() {
 
 export async function getChallengeById(id) {
   if (!id) return null
-  return singleOrNull(
-    supabase
-      .from(TABLE.Challenge)
-      .select('*')
-      .eq('id', id)
-      .limit(1)
-  )
+
+  const { data, error } = await supabase
+    .from(TABLE.Challenge)
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (error) throw error
+  return data ?? null
 }
 
 export async function listChallengeDays(challengeId) {
   if (!challengeId) return []
+
   const { data, error } = await supabase
     .from(TABLE.ChallengeDay)
     .select('*')
@@ -56,28 +58,53 @@ export async function listChallengeDays(challengeId) {
 
 export async function getStudentProgress({ userId, challengeId }) {
   if (!userId || !challengeId) return null
-  return singleOrNull(
-    supabase
-      .from(TABLE.StudentProgress)
-      .select('*')
-      .eq('linked_user_id', userId)
-      .eq('challenge_id', challengeId)
-      .limit(1)
-  )
+
+  const { data, error } = await supabase
+    .from(TABLE.StudentProgress)
+    .select('*')
+    .eq('linked_user_id', userId)
+    .eq('challenge_id', challengeId)
+    .maybeSingle()
+
+  if (error) throw error
+  return data ?? null
 }
 
 export async function upsertStudentProgress(progress) {
+  if (!progress?.linked_user_id || !progress?.challenge_id) {
+    throw new Error('Missing linked_user_id or challenge_id for student progress.')
+  }
+
+  const payload = {
+    linked_user_id: progress.linked_user_id,
+    challenge_id: progress.challenge_id,
+    code_name: progress.code_name ?? null,
+    current_day: progress.current_day ?? 1,
+    completed_days: Array.isArray(progress.completed_days) ? progress.completed_days : [],
+    started_date: progress.started_date ?? new Date().toISOString(),
+    last_accessed: progress.last_accessed ?? new Date().toISOString(),
+    personal_notes: progress.personal_notes ?? null,
+  }
+
   const { data, error } = await supabase
     .from(TABLE.StudentProgress)
-    .upsert(progress)
+    .upsert(payload, {
+      onConflict: 'linked_user_id,challenge_id',
+    })
     .select('*')
+    .single()
 
-  if (error) throw error
-  return Array.isArray(data) ? (data[0] ?? null) : (data ?? null)
+  if (error) {
+    console.error('upsertStudentProgress error:', error)
+    throw error
+  }
+
+  return data ?? null
 }
 
 export async function listRecentProgress(userId) {
   if (!userId) return []
+
   const { data, error } = await supabase
     .from(TABLE.StudentProgress)
     .select('*')
