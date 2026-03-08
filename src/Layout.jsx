@@ -17,11 +17,9 @@ export default function Layout({ children, currentPageName }) {
     'student';
 
   const isStudent = userRole === 'student' || userRole === 'user';
-  const isSchoolAdmin = userRole === 'school_admin';
   const isEpsyAdmin = userRole === 'epsy_admin';
 
   const showStudentNav = isStudent || isEpsyAdmin;
-  const showSchoolNav = isSchoolAdmin || isEpsyAdmin;
 
   const studentNav = [
     { name: 'Home', icon: Home, page: 'Home' },
@@ -32,14 +30,12 @@ export default function Layout({ children, currentPageName }) {
   ];
 
   const adminNav = [
+    { name: 'Dashboard', page: 'AdminHome' },
     { name: 'Challenges', page: 'AdminChallenges' },
     { name: 'Decoder', page: 'AdminDecoder' },
     { name: 'Builder', page: 'AdminBuilder' },
-  ];
-
-  const schoolNav = [
-    { name: 'Dashboard', page: 'SchoolDashboard' },
-    { name: 'Student Access', page: 'SchoolStudentAccess' },
+    { name: 'Schools', page: 'AdminSchools' },
+    { name: 'Student Access', page: 'AdminStudentAccess' },
   ];
 
   return (
@@ -47,7 +43,7 @@ export default function Layout({ children, currentPageName }) {
       <main>{children}</main>
 
       {/* Student Bottom Nav */}
-      {!isAdminPage && !isSchoolDashboard && showStudentNav && (
+      {!isAdminPage && showStudentNav && (
         <nav
           className="fixed bottom-0 left-0 right-0 z-50 border-t bg-white/90 backdrop-blur-lg"
           style={{ borderColor: '#2E5C6E' }}
@@ -93,38 +89,13 @@ export default function Layout({ children, currentPageName }) {
                 {item.name}
               </Link>
             ))}
-          </div>
-        </nav>
-      )}
 
-      {/* School Dashboard Top Nav */}
-      {isSchoolDashboard && showSchoolNav && (
-        <nav
-          className="fixed top-0 left-0 right-0 z-50 border-b bg-white"
-          style={{ borderColor: '#2E5C6E' }}
-        >
-          <div className="flex items-center gap-6 px-8 py-4">
-            <span className="font-bold text-[#0CC0DF] text-lg">School Portal</span>
-            {schoolNav.map((item) => (
-              <Link
-                key={item.name}
-                to={createPageUrl(item.page)}
-                className="text-sm font-medium transition-colors"
-                style={{
-                  color: currentPageName === item.page ? '#0CC0DF' : '#2E5C6E'
-                }}
-              >
-                {item.name}
-              </Link>
-            ))}
-            {isEpsyAdmin && (
-              <Link
-                to={createPageUrl('Home')}
-                className="ml-auto text-sm font-medium text-[#2E5C6E] hover:text-[#0CC0DF]"
-              >
-                → Student View
-              </Link>
-            )}
+            <Link
+              to={createPageUrl('Home')}
+              className="ml-auto text-sm font-medium text-[#2E5C6E] hover:text-[#0CC0DF]"
+            >
+              → Student View
+            </Link>
           </div>
         </nav>
       )}

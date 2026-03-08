@@ -3,14 +3,12 @@ import { supabase } from "@/lib/supabaseClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
 
 export default function LoginScreen() {
   const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const navigate = useNavigate();
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -32,8 +30,6 @@ export default function LoginScreen() {
         },
       });
 
-      console.log("login result:", data, fnError);
-
       if (fnError) {
         throw new Error(fnError.message || "Login failed.");
       }
@@ -44,8 +40,15 @@ export default function LoginScreen() {
 
       localStorage.setItem("epsy_user", JSON.stringify(data.student));
 
-      // Force a full reload so AuthContext re-checks localStorage
-      window.location.href = "/";
+      const role = data?.student?.role;
+
+      const redirect =
+        role === "epsy_admin"
+          ? "/AdminHome"
+          : "/";
+
+      window.location.href = redirect;
+
     } catch (err) {
       setError(err?.message || "Login failed");
     } finally {
