@@ -120,7 +120,6 @@ export default function ChallengeView() {
     [challenge?.execution_overview]
   );
 
-  // Block school_admin from student pages
   if (userRole === 'school_admin') {
     return (
       <div className="min-h-screen bg-[#F1F4F6] p-8 flex items-center justify-center">
@@ -137,7 +136,7 @@ export default function ChallengeView() {
     if (!codeName.trim() || !userId || !challengeId) return;
 
     startMutation.mutate({
-      linked_user_id: userId,
+      user_id: userId,
       challenge_id: challengeId,
       code_name: codeName.trim(),
       current_day: 1,

@@ -62,7 +62,7 @@ export async function getStudentProgress({ userId, challengeId }) {
   const { data, error } = await supabase
     .from(TABLE.StudentProgress)
     .select('*')
-    .eq('linked_user_id', userId)
+    .eq('user_id', userId)
     .eq('challenge_id', challengeId)
     .maybeSingle()
 
@@ -71,12 +71,12 @@ export async function getStudentProgress({ userId, challengeId }) {
 }
 
 export async function upsertStudentProgress(progress) {
-  if (!progress?.linked_user_id || !progress?.challenge_id) {
-    throw new Error('Missing linked_user_id or challenge_id for student progress.')
+  if (!progress?.user_id || !progress?.challenge_id) {
+    throw new Error('Missing user_id or challenge_id for student progress.')
   }
 
   const payload = {
-    linked_user_id: progress.linked_user_id,
+    user_id: progress.user_id,
     challenge_id: progress.challenge_id,
     code_name: progress.code_name ?? null,
     current_day: progress.current_day ?? 1,
@@ -89,7 +89,7 @@ export async function upsertStudentProgress(progress) {
   const { data, error } = await supabase
     .from(TABLE.StudentProgress)
     .upsert(payload, {
-      onConflict: 'linked_user_id,challenge_id',
+      onConflict: 'user_id,challenge_id',
     })
     .select('*')
     .single()
@@ -108,7 +108,7 @@ export async function listRecentProgress(userId) {
   const { data, error } = await supabase
     .from(TABLE.StudentProgress)
     .select('*')
-    .eq('linked_user_id', userId)
+    .eq('user_id', userId)
     .order('last_accessed', { ascending: false, nullsFirst: false })
     .limit(10)
 
