@@ -44,6 +44,7 @@ export default function AdminStudentAccess() {
   const [form, setForm] = useState(emptyForm);
   const [uiError, setUiError] = useState("");
   const [uiSuccess, setUiSuccess] = useState("");
+  const [expandedSchoolId, setExpandedSchoolId] = useState(null);
 
   const {
     data: studentAccounts = [],
@@ -85,6 +86,25 @@ export default function AdminStudentAccess() {
 
   const selectedSchool = form.school_id ? schoolMap[form.school_id] : null;
 
+  const adminAccounts = useMemo(() => {
+    return studentAccounts.filter((account) => account.role === "epsy_admin");
+  }, [studentAccounts]);
+
+  const studentOnlyAccounts = useMemo(() => {
+    return studentAccounts.filter((account) => (account.role || "student") === "student");
+  }, [studentAccounts]);
+
+  const schoolSummaries = useMemo(() => {
+    return schools.map((school) => {
+      const accounts = studentOnlyAccounts.filter((account) => account.school_id === school.id);
+      return {
+        ...school,
+        studentAccounts: accounts,
+        accountCount: accounts.length,
+      };
+    });
+  }, [schools, studentOnlyAccounts]);
+
   const getNextUsernameForSchool = (schoolId) => {
     const school = schoolMap[schoolId];
     if (!school?.school_code) return "";
@@ -103,27 +123,29 @@ export default function AdminStudentAccess() {
   };
 
   useEffect(() => {
-    if (!form.school_id) {
-      return;
-    }
-
-    if (form.id) {
-      return;
-    }
+    if (!form.school_id) return;
+    if (form.id) return;
+    if (form.role !== "student") return;
 
     const nextUsername = getNextUsernameForSchool(form.school_id);
 
-    setForm((prev) => {
-      if (prev.school_id !== form.school_id) return prev;
-
-      return {
-        ...prev,
-        username: nextUsername,
-        pin: generateRandomPin(),
-      };
-    });
+    setForm((prev) => ({
+      ...prev,
+      username: nextUsername,
+      pin: prev.pin || generateRandomPin(),
+    }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.school_id, form.id, studentAccounts, schools]);
+  }, [form.school_id, form.id, form.role, studentAccounts.length, schools.length]);
+
+  useEffect(() => {
+    if (form.role === "epsy_admin") {
+      setForm((prev) => ({
+        ...prev,
+        school_id: "",
+        grade: "",
+      }));
+    }
+  }, [form.role]);
 
   const saveMutation = useMutation({
     mutationFn: async (currentForm) => {
@@ -131,8 +153,8 @@ export default function AdminStudentAccess() {
         username: currentForm.username.trim().toLowerCase(),
         pin: currentForm.pin.trim(),
         role: currentForm.role,
-        grade: currentForm.grade.trim(),
-        school_id: currentForm.school_id || null,
+        grade: currentForm.role === "student" ? currentForm.grade.trim() : "",
+        school_id: currentForm.role === "student" ? currentForm.school_id || null : null,
         access_status: currentForm.access_status,
         status: currentForm.status,
       };
@@ -159,7 +181,7 @@ export default function AdminStudentAccess() {
         if (error) throw error;
         savedAccount = data;
 
-        if (currentForm.school_id) {
+        if (currentForm.role === "student" && currentForm.school_id) {
           const school = schoolMap[currentForm.school_id];
           const nextSeatsGenerated = Number(school?.seats_generated || 0) + 1;
 
@@ -187,16 +209,21 @@ export default function AdminStudentAccess() {
         return;
       }
 
+      if (variables.role !== "student" || !variables.school_id) {
+        setForm({
+          ...emptyForm,
+          role: variables.role,
+          access_status: variables.access_status,
+          status: variables.status,
+        });
+        return;
+      }
+
       const preservedSchoolId = variables.school_id;
       const preservedRole = variables.role;
       const preservedGrade = variables.grade;
       const preservedAccessStatus = variables.access_status;
       const preservedStatus = variables.status;
-
-      if (!preservedSchoolId) {
-        setForm(emptyForm);
-        return;
-      }
 
       const nextUsername = getNextUsernameForSchool(preservedSchoolId);
 
@@ -224,24 +251,29 @@ export default function AdminStudentAccess() {
     await saveMutation.mutateAsync(form);
   };
 
-  const editStudent = (student) => {
+  const editAccount = (account) => {
     setUiError("");
     setUiSuccess("");
     setForm({
-      id: student.id,
-      username: student.username ?? "",
-      pin: student.pin ?? "",
-      role: student.role ?? "student",
-      grade: student.grade ?? "",
-      school_id: student.school_id ?? "",
-      access_status: student.access_status ?? "active",
-      status: student.status ?? "unused",
+      id: account.id,
+      username: account.username ?? "",
+      pin: account.pin ?? "",
+      role: account.role ?? "student",
+      grade: account.grade ?? "",
+      school_id: account.school_id ?? "",
+      access_status: account.access_status ?? "active",
+      status: account.status ?? "unused",
     });
 
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const regenerateCredentials = () => {
+    if (form.role !== "student") {
+      setUiError("Credential auto-generation is only for student accounts.");
+      return;
+    }
+
     if (!form.school_id) {
       setUiError("Please select a school first.");
       return;
@@ -257,9 +289,13 @@ export default function AdminStudentAccess() {
     }));
   };
 
+  const toggleSchoolAccounts = (schoolId) => {
+    setExpandedSchoolId((prev) => (prev === schoolId ? null : schoolId));
+  };
+
   return (
     <div className="min-h-screen bg-[#F1F4F6] px-4 md:px-8 py-24">
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-black">Admin Student Access</h1>
           <p className="text-[#2E5C6E] mt-2">
@@ -286,38 +322,18 @@ export default function AdminStudentAccess() {
           <CardContent>
             <form onSubmit={handleSubmit} className="grid md:grid-cols-2 gap-4">
               <div>
-                <Label>School</Label>
-                <select
-                  value={form.school_id}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      school_id: e.target.value,
-                      id: null,
-                    }))
-                  }
-                  className="w-full border rounded-md px-3 py-2 bg-white"
-                >
-                  <option value="">No school selected</option>
-                  {schools.map((school) => (
-                    <option key={school.id} value={school.id}>
-                      {school.name}
-                    </option>
-                  ))}
-                </select>
-                {selectedSchool && (
-                  <p className="text-xs text-[#2E5C6E] mt-2">
-                    School code: {selectedSchool.school_code || "—"} • Seats used:{" "}
-                    {selectedSchool.seats_generated ?? 0}/{selectedSchool.seat_limit ?? 0}
-                  </p>
-                )}
-              </div>
-
-              <div>
                 <Label>Role</Label>
                 <select
                   value={form.role}
-                  onChange={(e) => setForm((prev) => ({ ...prev, role: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      role: e.target.value,
+                      school_id: e.target.value === "student" ? prev.school_id : "",
+                      grade: e.target.value === "student" ? prev.grade : "",
+                      id: null,
+                    }))
+                  }
                   className="w-full border rounded-md px-3 py-2 bg-white"
                 >
                   <option value="student">student</option>
@@ -325,28 +341,76 @@ export default function AdminStudentAccess() {
                 </select>
               </div>
 
-              <div>
-                <Label>Grade</Label>
-                <Input
-                  value={form.grade}
-                  onChange={(e) => setForm((prev) => ({ ...prev, grade: e.target.value }))}
-                  placeholder="e.g. Grade 10"
-                />
-              </div>
+              {form.role === "student" ? (
+                <div>
+                  <Label>School</Label>
+                  <select
+                    value={form.school_id}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        school_id: e.target.value,
+                        id: null,
+                      }))
+                    }
+                    className="w-full border rounded-md px-3 py-2 bg-white"
+                  >
+                    <option value="">No school selected</option>
+                    {schools.map((school) => (
+                      <option key={school.id} value={school.id}>
+                        {school.name}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedSchool && (
+                    <p className="text-xs text-[#2E5C6E] mt-2">
+                      School code: {selectedSchool.school_code || "—"} • Seats used:{" "}
+                      {selectedSchool.seats_generated ?? 0}/{selectedSchool.seat_limit ?? 0}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <Label>Access Status</Label>
+                  <select
+                    value={form.access_status}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, access_status: e.target.value }))
+                    }
+                    className="w-full border rounded-md px-3 py-2 bg-white"
+                  >
+                    <option value="active">active</option>
+                    <option value="inactive">inactive</option>
+                  </select>
+                </div>
+              )}
 
-              <div>
-                <Label>Access Status</Label>
-                <select
-                  value={form.access_status}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, access_status: e.target.value }))
-                  }
-                  className="w-full border rounded-md px-3 py-2 bg-white"
-                >
-                  <option value="active">active</option>
-                  <option value="inactive">inactive</option>
-                </select>
-              </div>
+              {form.role === "student" && (
+                <div>
+                  <Label>Grade</Label>
+                  <Input
+                    value={form.grade}
+                    onChange={(e) => setForm((prev) => ({ ...prev, grade: e.target.value }))}
+                    placeholder="e.g. Grade 10"
+                  />
+                </div>
+              )}
+
+              {form.role === "student" && (
+                <div>
+                  <Label>Access Status</Label>
+                  <select
+                    value={form.access_status}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, access_status: e.target.value }))
+                    }
+                    className="w-full border rounded-md px-3 py-2 bg-white"
+                  >
+                    <option value="active">active</option>
+                    <option value="inactive">inactive</option>
+                  </select>
+                </div>
+              )}
 
               <div>
                 <Label>Account Status</Label>
@@ -361,14 +425,16 @@ export default function AdminStudentAccess() {
                 </select>
               </div>
 
-              <div></div>
-
               <div>
                 <Label>Username</Label>
                 <Input
                   value={form.username}
                   onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
-                  placeholder="Auto-generated from school"
+                  placeholder={
+                    form.role === "student"
+                      ? "Auto-generated from school"
+                      : "Enter admin username"
+                  }
                   required
                 />
               </div>
@@ -379,13 +445,17 @@ export default function AdminStudentAccess() {
                   type="password"
                   value={form.pin}
                   onChange={(e) => setForm((prev) => ({ ...prev, pin: e.target.value }))}
-                  placeholder="Auto-generated 6-digit PIN"
+                  placeholder={
+                    form.role === "student"
+                      ? "Auto-generated 6-digit PIN"
+                      : "Enter admin PIN"
+                  }
                   required
                 />
               </div>
 
               <div className="md:col-span-2 flex gap-3 flex-wrap">
-                {!form.id && (
+                {!form.id && form.role === "student" && (
                   <Button type="button" variant="outline" onClick={regenerateCredentials}>
                     Regenerate Username and PIN
                   </Button>
@@ -415,47 +485,154 @@ export default function AdminStudentAccess() {
           </CardContent>
         </Card>
 
-        {isLoading && <p className="text-[#2E5C6E]">Loading student accounts...</p>}
+        {isLoading && <p className="text-[#2E5C6E]">Loading accounts...</p>}
         {error && <p className="text-red-600">{error.message}</p>}
 
-        <div className="grid gap-4">
-          {studentAccounts.map((student) => (
-            <Card key={student.id} className="border-[#2E5C6E]/15">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg text-[#1E1E1E]">
-                  {student.username}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-[#2E5C6E] space-y-1">
-                <p>Username: {student.username}</p>
-                <p>Role: {student.role || "student"}</p>
-                <p>Grade: {student.grade || "—"}</p>
-                <p>
-                  School: {student.school_id && schoolMap[student.school_id]
-                    ? schoolMap[student.school_id].name
-                    : "—"}
-                </p>
-                <p>Status: {student.status || "unused"}</p>
-                <p>Access Status: {student.access_status || "active"}</p>
-                <p>PIN: {student.pin || "—"}</p>
+        <Card className="border-[#2E5C6E]/15">
+          <CardHeader>
+            <CardTitle>Admin Accounts</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {adminAccounts.length === 0 ? (
+              <p className="text-[#2E5C6E]">No admin accounts yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-[#2E5C6E]">
+                      <th className="py-3 pr-4">Username</th>
+                      <th className="py-3 pr-4">Role</th>
+                      <th className="py-3 pr-4">Access Status</th>
+                      <th className="py-3 pr-4">Account Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminAccounts.map((account) => (
+                      <tr
+                        key={account.id}
+                        className="border-b cursor-pointer hover:bg-white"
+                        onClick={() => editAccount(account)}
+                      >
+                        <td className="py-3 pr-4 text-[#1E1E1E] font-medium">{account.username}</td>
+                        <td className="py-3 pr-4 text-[#2E5C6E]">{account.role || "epsy_admin"}</td>
+                        <td className="py-3 pr-4 text-[#2E5C6E]">{account.access_status || "active"}</td>
+                        <td className="py-3 pr-4 text-[#2E5C6E]">{account.status || "unused"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-                <div className="pt-2">
-                  <Button variant="outline" onClick={() => editStudent(student)}>
-                    Edit
-                  </Button>
+        <Card className="border-[#2E5C6E]/15">
+          <CardHeader>
+            <CardTitle>Student Accounts by School</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {schoolSummaries.length === 0 ? (
+              <p className="text-[#2E5C6E]">No schools available yet.</p>
+            ) : (
+              <div className="space-y-4">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-[#2E5C6E]">
+                        <th className="py-3 pr-4">School Name</th>
+                        <th className="py-3 pr-4">School Code</th>
+                        <th className="py-3 pr-4">Seat Usage</th>
+                        <th className="py-3 pr-4">Student Accounts</th>
+                        <th className="py-3 pr-4">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {schoolSummaries.map((school) => (
+                        <tr key={school.id} className="border-b">
+                          <td className="py-3 pr-4 text-[#1E1E1E] font-medium">{school.name}</td>
+                          <td className="py-3 pr-4 text-[#2E5C6E]">{school.school_code || "—"}</td>
+                          <td className="py-3 pr-4 text-[#2E5C6E]">
+                            {school.seats_generated ?? 0}/{school.seat_limit ?? 0}
+                          </td>
+                          <td className="py-3 pr-4 text-[#2E5C6E]">{school.accountCount}</td>
+                          <td className="py-3 pr-4">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => toggleSchoolAccounts(school.id)}
+                            >
+                              {expandedSchoolId === school.id ? "Hide Accounts" : "View Accounts"}
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
 
-          {!isLoading && studentAccounts.length === 0 && (
-            <Card>
-              <CardContent className="py-8 text-[#2E5C6E]">
-                No accounts yet.
-              </CardContent>
-            </Card>
-          )}
-        </div>
+                {schoolSummaries.map((school) => {
+                  if (expandedSchoolId !== school.id) return null;
+
+                  return (
+                    <Card key={`expanded-${school.id}`} className="border-[#2E5C6E]/10">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-lg text-[#1E1E1E]">
+                          {school.name} Accounts
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {school.studentAccounts.length === 0 ? (
+                          <p className="text-[#2E5C6E]">No student accounts for this school yet.</p>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b text-left text-[#2E5C6E]">
+                                  <th className="py-3 pr-4">Username</th>
+                                  <th className="py-3 pr-4">Grade</th>
+                                  <th className="py-3 pr-4">Access Status</th>
+                                  <th className="py-3 pr-4">Account Status</th>
+                                  <th className="py-3 pr-4">PIN</th>
+                                  <th className="py-3 pr-4">Action</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {school.studentAccounts.map((account) => (
+                                  <tr key={account.id} className="border-b">
+                                    <td className="py-3 pr-4 text-[#1E1E1E] font-medium">
+                                      {account.username}
+                                    </td>
+                                    <td className="py-3 pr-4 text-[#2E5C6E]">{account.grade || "—"}</td>
+                                    <td className="py-3 pr-4 text-[#2E5C6E]">
+                                      {account.access_status || "active"}
+                                    </td>
+                                    <td className="py-3 pr-4 text-[#2E5C6E]">
+                                      {account.status || "unused"}
+                                    </td>
+                                    <td className="py-3 pr-4 text-[#2E5C6E]">{account.pin || "—"}</td>
+                                    <td className="py-3 pr-4">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => editAccount(account)}
+                                      >
+                                        Edit
+                                      </Button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
