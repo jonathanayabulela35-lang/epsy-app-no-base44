@@ -47,8 +47,6 @@ export default function AdminSchools() {
         status: currentForm.status || "active",
       };
 
-      console.log("Saving school payload:", payload);
-
       if (currentForm.id) {
         const { data, error } = await supabase
           .from("schools")
@@ -70,8 +68,7 @@ export default function AdminSchools() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
-      console.log("School save success:", data);
+    onSuccess: () => {
       setUiError("");
       setUiSuccess("School saved successfully.");
       queryClient.invalidateQueries({ queryKey: ["admin-schools"] });
@@ -79,7 +76,6 @@ export default function AdminSchools() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
     onError: (error) => {
-      console.error("School save error:", error);
       setUiSuccess("");
       setUiError(error?.message || "Failed to save school.");
     },
@@ -100,7 +96,6 @@ export default function AdminSchools() {
       queryClient.invalidateQueries({ queryKey: ["admin-schools"] });
     },
     onError: (error) => {
-      console.error("School delete error:", error);
       setUiSuccess("");
       setUiError(error?.message || "Failed to delete school.");
     },
