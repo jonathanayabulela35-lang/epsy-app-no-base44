@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/AuthContext";
@@ -43,6 +43,10 @@ export default function QuestionDecoder() {
   const [selectedSubject, setSelectedSubject] = useState(null);
   const { user } = useAuth();
   const userId = user?.id;
+
+  useEffect(() => {
+    document.title = "EpsyApp | Question Decoder";
+  }, []);
 
   const {
     data: decoderSubjects = [],

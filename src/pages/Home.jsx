@@ -1,11 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Brain, BookOpen, HelpCircle, ChevronRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { listRecentProgress, ensureStudentPreferences } from '@/api/db';
 import { supabase } from '@/lib/supabaseClient';
@@ -16,6 +15,10 @@ export default function Home() {
   const userId = user?.id;
 
   const navigate = useNavigate();
+
+  useEffect(() => {
+    document.title = 'EpsyApp | Home';
+  }, []);
 
   const { data: progress = [] } = useQuery({
     queryKey: ['student-progress'],
@@ -72,7 +75,7 @@ export default function Home() {
     ? `Welcome back, ${displayName}.`
     : 'Welcome back.';
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (userRole === 'school_admin') {
       navigate(createPageUrl('SchoolDashboard'));
     }

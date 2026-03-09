@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/AuthContext";
@@ -44,6 +44,10 @@ export default function Personalisation() {
   const [uiError, setUiError] = useState("");
   const [uiSuccess, setUiSuccess] = useState("");
 
+  useEffect(() => {
+    document.title = "EpsyApp | Personalisation";
+  }, []);
+
   const { data: preferences, isLoading } = useQuery({
     queryKey: ["student-preferences", studentId],
     enabled: !!studentId && userRole === "student",
@@ -74,7 +78,7 @@ export default function Personalisation() {
 
   const [form, setForm] = useState(emptyPreferences);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (preferences) {
       setForm({
         display_name: preferences.display_name ?? "",

@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { User, LogOut, Sliders, ChevronRight, Shield } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -10,6 +10,10 @@ import { useAuth } from '@/lib/AuthContext';
 export default function Settings() {
   const { user, logout } = useAuth();
   const userRole = user?.user_metadata?.role || user?.app_metadata?.role;
+
+  useEffect(() => {
+    document.title = "EpsyApp | Settings";
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -34,7 +38,6 @@ export default function Settings() {
         >
           <h1 className="text-3xl font-bold text-black mb-8">Settings</h1>
 
-          {/* Profile Card */}
           <Card className="bg-white border-[#2E5C6E]/20">
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
@@ -42,14 +45,15 @@ export default function Settings() {
                   <User className="w-7 h-7 text-[#0CC0DF]" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-[#1E1E1E]">{user?.user_metadata?.full_name || user?.user_metadata?.display_name || 'User'}</h3>
+                  <h3 className="font-semibold text-[#1E1E1E]">
+                    {user?.user_metadata?.full_name || user?.user_metadata?.display_name || 'User'}
+                  </h3>
                   <p className="text-sm text-[#2E5C6E]">{user?.email}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Personalisation Link */}
           <Link to={createPageUrl('Personalisation')}>
             <Card className="bg-white border-[#2E5C6E]/20 hover:border-[#0CC0DF]/40 transition-all cursor-pointer mt-6">
               <CardContent className="p-6">
@@ -69,7 +73,6 @@ export default function Settings() {
             </Card>
           </Link>
 
-          {/* Account Access Link */}
           <Link to={createPageUrl('AccountAccess')}>
             <Card className="bg-white border-[#2E5C6E]/20 hover:border-[#0CC0DF]/40 transition-all cursor-pointer mt-6">
               <CardContent className="p-6">
@@ -89,7 +92,6 @@ export default function Settings() {
             </Card>
           </Link>
 
-          {/* Logout */}
           <Button
             onClick={handleLogout}
             variant="outline"
