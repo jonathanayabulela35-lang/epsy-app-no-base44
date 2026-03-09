@@ -39,12 +39,26 @@ function buildUsername(schoolCode, number) {
   return `${schoolCode.toLowerCase()}${String(number).padStart(3, "0")}`;
 }
 
+function escapeCsv(value) {
+  const stringValue = String(value ?? "");
+  if (
+    stringValue.includes(",") ||
+    stringValue.includes('"') ||
+    stringValue.includes("\n")
+  ) {
+    return `"${stringValue.replace(/"/g, '""')}"`;
+  }
+  return stringValue;
+}
+
 export default function AdminStudentAccess() {
   const queryClient = useQueryClient();
+
   const [form, setForm] = useState(emptyForm);
   const [uiError, setUiError] = useState("");
   const [uiSuccess, setUiSuccess] = useState("");
   const [expandedSchoolId, setExpandedSchoolId] = useState(null);
+  const [gradeFilterBySchool, setGradeFilterBySchool] = useState({});
 
   const {
     data: studentAccounts = [],
@@ -91,12 +105,17 @@ export default function AdminStudentAccess() {
   }, [studentAccounts]);
 
   const studentOnlyAccounts = useMemo(() => {
-    return studentAccounts.filter((account) => (account.role || "student") === "student");
+    return studentAccounts.filter(
+      (account) => (account.role || "student") === "student"
+    );
   }, [studentAccounts]);
 
   const schoolSummaries = useMemo(() => {
     return schools.map((school) => {
-      const accounts = studentOnlyAccounts.filter((account) => account.school_id === school.id);
+      const accounts = studentOnlyAccounts.filter(
+        (account) => account.school_id === school.id
+      );
+
       return {
         ...school,
         studentAccounts: accounts,
@@ -111,7 +130,9 @@ export default function AdminStudentAccess() {
 
     const usedNumbers = studentAccounts
       .filter((account) => account.school_id === schoolId)
-      .map((account) => extractUsernameNumber(account.username, school.school_code))
+      .map((account) =>
+        extractUsernameNumber(account.username, school.school_code)
+      )
       .filter((num) => Number.isInteger(num));
 
     let nextNumber = 1;
@@ -201,7 +222,9 @@ export default function AdminStudentAccess() {
       setUiSuccess("Account saved successfully.");
 
       queryClient.invalidateQueries({ queryKey: ["admin-student-accounts"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-schools-for-student-access"] });
+      queryClient.invalidateQueries({
+        queryKey: ["admin-schools-for-student-access"],
+      });
       queryClient.invalidateQueries({ queryKey: ["admin-schools"] });
 
       if (variables.id) {
@@ -241,6 +264,102 @@ export default function AdminStudentAccess() {
     onError: (error) => {
       setUiSuccess("");
       setUiError(error?.message || "Failed to save account.");
+    },
+  });
+
+  const generateRemainingMutation = useMutation({
+    mutationFn: async ({
+      schoolId,
+      role,
+      grade,
+      accessStatus,
+      accountStatus,
+    }) => {
+      const school = schoolMap[schoolId];
+
+      if (!school) {
+        throw new Error("Please choose a valid school.");
+      }
+
+      const seatLimit = Number(school.seat_limit || 0);
+      const seatsGenerated = Number(school.seats_generated || 0);
+      const remaining = seatLimit - seatsGenerated;
+
+      if (remaining <= 0) {
+        throw new Error("This school has no remaining seats to generate.");
+      }
+
+      const existingNumbers = studentAccounts
+        .filter((account) => account.school_id === schoolId)
+        .map((account) =>
+          extractUsernameNumber(account.username, school.school_code)
+        )
+        .filter((num) => Number.isInteger(num));
+
+      const usedNumbers = new Set(existingNumbers);
+      const rowsToInsert = [];
+      let candidateNumber = 1;
+
+      while (rowsToInsert.length < remaining) {
+        if (!usedNumbers.has(candidateNumber)) {
+          rowsToInsert.push({
+            username: buildUsername(school.school_code, candidateNumber),
+            pin: generateRandomPin(),
+            role,
+            grade: grade.trim(),
+            school_id: schoolId,
+            access_status: accessStatus,
+            status: accountStatus,
+          });
+          usedNumbers.add(candidateNumber);
+        }
+        candidateNumber += 1;
+      }
+
+      const { error: insertError } = await supabase
+        .from("student_accounts")
+        .insert(rowsToInsert);
+
+      if (insertError) throw insertError;
+
+      const { error: schoolUpdateError } = await supabase
+        .from("schools")
+        .update({ seats_generated: seatLimit })
+        .eq("id", schoolId);
+
+      if (schoolUpdateError) throw schoolUpdateError;
+
+      return { generatedCount: rowsToInsert.length, schoolName: school.name };
+    },
+    onSuccess: (result, variables) => {
+      setUiError("");
+      setUiSuccess(
+        `${result.generatedCount} account(s) generated for ${result.schoolName}.`
+      );
+
+      queryClient.invalidateQueries({ queryKey: ["admin-student-accounts"] });
+      queryClient.invalidateQueries({
+        queryKey: ["admin-schools-for-student-access"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["admin-schools"] });
+
+      const nextUsername = getNextUsernameForSchool(variables.schoolId);
+
+      setForm((prev) => ({
+        ...prev,
+        id: null,
+        school_id: variables.schoolId,
+        role: variables.role,
+        grade: variables.grade,
+        access_status: variables.accessStatus,
+        status: variables.accountStatus,
+        username: nextUsername,
+        pin: generateRandomPin(),
+      }));
+    },
+    onError: (error) => {
+      setUiSuccess("");
+      setUiError(error?.message || "Failed to generate remaining accounts.");
     },
   });
 
@@ -291,6 +410,127 @@ export default function AdminStudentAccess() {
 
   const toggleSchoolAccounts = (schoolId) => {
     setExpandedSchoolId((prev) => (prev === schoolId ? null : schoolId));
+  };
+
+  const setSchoolGradeFilter = (schoolId, value) => {
+    setGradeFilterBySchool((prev) => ({
+      ...prev,
+      [schoolId]: value,
+    }));
+  };
+
+  const getFilteredAccountsForSchool = (school) => {
+    const filterValue = gradeFilterBySchool[school.id] || "";
+    if (!filterValue) return school.studentAccounts;
+    return school.studentAccounts.filter(
+      (account) => (account.grade || "") === filterValue
+    );
+  };
+
+  const getGradesForSchool = (school) => {
+    return [...new Set(school.studentAccounts.map((a) => a.grade).filter(Boolean))];
+  };
+
+  const copyAccounts = async (accounts, school) => {
+    if (accounts.length === 0) {
+      setUiError("There are no accounts to copy for this selection.");
+      return;
+    }
+
+    const currentGradeFilter = gradeFilterBySchool[school.id] || "All grades";
+
+    const text = [
+      `School: ${school.name}`,
+      `School Code: ${school.school_code || "—"}`,
+      `Grade: ${currentGradeFilter}`,
+      "",
+      ...accounts.map(
+        (account) =>
+          `Username: ${account.username} | PIN: ${account.pin} | Grade: ${account.grade || "-"}`
+      ),
+    ].join("\n");
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setUiError("");
+      setUiSuccess(`Copied ${accounts.length} account(s).`);
+    } catch {
+      setUiSuccess("");
+      setUiError("Failed to copy accounts.");
+    }
+  };
+
+  const downloadCSV = (accounts, school) => {
+    if (accounts.length === 0) {
+      setUiError("There are no accounts to download for this selection.");
+      return;
+    }
+
+    const rows = [
+      [
+        "School Name",
+        "School Code",
+        "Grade",
+        "Username",
+        "PIN",
+        "Access Status",
+        "Account Status",
+      ],
+      ...accounts.map((account) => [
+        school.name,
+        school.school_code || "",
+        account.grade || "",
+        account.username || "",
+        account.pin || "",
+        account.access_status || "",
+        account.status || "",
+      ]),
+    ];
+
+    const csvContent = rows
+      .map((row) => row.map(escapeCsv).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.setAttribute(
+      "download",
+      `${(school.school_code || "school").toLowerCase()}_accounts.csv`
+    );
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setUiError("");
+    setUiSuccess("CSV download started.");
+  };
+
+  const handleGenerateRemainingAccounts = () => {
+    if (form.role !== "student") {
+      setUiError("Generate remaining accounts only works for student accounts.");
+      return;
+    }
+
+    if (!form.school_id) {
+      setUiError("Please select a school first.");
+      return;
+    }
+
+    setUiError("");
+    setUiSuccess("");
+
+    generateRemainingMutation.mutate({
+      schoolId: form.school_id,
+      role: form.role,
+      grade: form.grade,
+      accessStatus: form.access_status,
+      accountStatus: form.status,
+    });
   };
 
   return (
@@ -456,9 +696,22 @@ export default function AdminStudentAccess() {
 
               <div className="md:col-span-2 flex gap-3 flex-wrap">
                 {!form.id && form.role === "student" && (
-                  <Button type="button" variant="outline" onClick={regenerateCredentials}>
-                    Regenerate Username and PIN
-                  </Button>
+                  <>
+                    <Button type="button" variant="outline" onClick={regenerateCredentials}>
+                      Regenerate Username and PIN
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleGenerateRemainingAccounts}
+                      disabled={generateRemainingMutation.isPending}
+                    >
+                      {generateRemainingMutation.isPending
+                        ? "Generating..."
+                        : "Generate Remaining Accounts"}
+                    </Button>
+                  </>
                 )}
 
                 <Button
@@ -513,10 +766,18 @@ export default function AdminStudentAccess() {
                         className="border-b cursor-pointer hover:bg-white"
                         onClick={() => editAccount(account)}
                       >
-                        <td className="py-3 pr-4 text-[#1E1E1E] font-medium">{account.username}</td>
-                        <td className="py-3 pr-4 text-[#2E5C6E]">{account.role || "epsy_admin"}</td>
-                        <td className="py-3 pr-4 text-[#2E5C6E]">{account.access_status || "active"}</td>
-                        <td className="py-3 pr-4 text-[#2E5C6E]">{account.status || "unused"}</td>
+                        <td className="py-3 pr-4 text-[#1E1E1E] font-medium">
+                          {account.username}
+                        </td>
+                        <td className="py-3 pr-4 text-[#2E5C6E]">
+                          {account.role || "epsy_admin"}
+                        </td>
+                        <td className="py-3 pr-4 text-[#2E5C6E]">
+                          {account.access_status || "active"}
+                        </td>
+                        <td className="py-3 pr-4 text-[#2E5C6E]">
+                          {account.status || "unused"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -549,19 +810,27 @@ export default function AdminStudentAccess() {
                     <tbody>
                       {schoolSummaries.map((school) => (
                         <tr key={school.id} className="border-b">
-                          <td className="py-3 pr-4 text-[#1E1E1E] font-medium">{school.name}</td>
-                          <td className="py-3 pr-4 text-[#2E5C6E]">{school.school_code || "—"}</td>
+                          <td className="py-3 pr-4 text-[#1E1E1E] font-medium">
+                            {school.name}
+                          </td>
+                          <td className="py-3 pr-4 text-[#2E5C6E]">
+                            {school.school_code || "—"}
+                          </td>
                           <td className="py-3 pr-4 text-[#2E5C6E]">
                             {school.seats_generated ?? 0}/{school.seat_limit ?? 0}
                           </td>
-                          <td className="py-3 pr-4 text-[#2E5C6E]">{school.accountCount}</td>
+                          <td className="py-3 pr-4 text-[#2E5C6E]">
+                            {school.accountCount}
+                          </td>
                           <td className="py-3 pr-4">
                             <Button
                               type="button"
                               variant="outline"
                               onClick={() => toggleSchoolAccounts(school.id)}
                             >
-                              {expandedSchoolId === school.id ? "Hide Accounts" : "View Accounts"}
+                              {expandedSchoolId === school.id
+                                ? "Hide Accounts"
+                                : "View Accounts"}
                             </Button>
                           </td>
                         </tr>
@@ -573,6 +842,9 @@ export default function AdminStudentAccess() {
                 {schoolSummaries.map((school) => {
                   if (expandedSchoolId !== school.id) return null;
 
+                  const filteredAccounts = getFilteredAccountsForSchool(school);
+                  const grades = getGradesForSchool(school);
+
                   return (
                     <Card key={`expanded-${school.id}`} className="border-[#2E5C6E]/10">
                       <CardHeader className="pb-2">
@@ -581,8 +853,43 @@ export default function AdminStudentAccess() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        {school.studentAccounts.length === 0 ? (
-                          <p className="text-[#2E5C6E]">No student accounts for this school yet.</p>
+                        <div className="flex gap-3 mb-4 flex-wrap">
+                          <select
+                            value={gradeFilterBySchool[school.id] || ""}
+                            onChange={(e) =>
+                              setSchoolGradeFilter(school.id, e.target.value)
+                            }
+                            className="border rounded-md px-3 py-2 bg-white"
+                          >
+                            <option value="">All grades</option>
+                            {grades.map((grade) => (
+                              <option key={grade} value={grade}>
+                                {grade}
+                              </option>
+                            ))}
+                          </select>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => copyAccounts(filteredAccounts, school)}
+                          >
+                            Copy Accounts
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => downloadCSV(filteredAccounts, school)}
+                          >
+                            Download CSV
+                          </Button>
+                        </div>
+
+                        {filteredAccounts.length === 0 ? (
+                          <p className="text-[#2E5C6E]">
+                            No student accounts for this school and grade selection yet.
+                          </p>
                         ) : (
                           <div className="overflow-x-auto">
                             <table className="w-full text-sm">
@@ -597,19 +904,23 @@ export default function AdminStudentAccess() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {school.studentAccounts.map((account) => (
+                                {filteredAccounts.map((account) => (
                                   <tr key={account.id} className="border-b">
                                     <td className="py-3 pr-4 text-[#1E1E1E] font-medium">
                                       {account.username}
                                     </td>
-                                    <td className="py-3 pr-4 text-[#2E5C6E]">{account.grade || "—"}</td>
+                                    <td className="py-3 pr-4 text-[#2E5C6E]">
+                                      {account.grade || "—"}
+                                    </td>
                                     <td className="py-3 pr-4 text-[#2E5C6E]">
                                       {account.access_status || "active"}
                                     </td>
                                     <td className="py-3 pr-4 text-[#2E5C6E]">
                                       {account.status || "unused"}
                                     </td>
-                                    <td className="py-3 pr-4 text-[#2E5C6E]">{account.pin || "—"}</td>
+                                    <td className="py-3 pr-4 text-[#2E5C6E]">
+                                      {account.pin || "—"}
+                                    </td>
                                     <td className="py-3 pr-4">
                                       <Button
                                         type="button"
