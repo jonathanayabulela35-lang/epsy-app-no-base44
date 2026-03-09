@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ensureStudentPreferences } from "@/api/db";
 
 function ExpandableTemplateCard({ item }) {
   const [open, setOpen] = useState(false);
@@ -71,6 +73,8 @@ function ExpandableTemplateCard({ item }) {
 
 export default function QuestionBuilder() {
   const [selectedSubject, setSelectedSubject] = useState(null);
+  const { user } = useAuth();
+  const userId = user?.id;
 
   const {
     data: templates = [],
@@ -91,9 +95,45 @@ export default function QuestionBuilder() {
     },
   });
 
+  const { data: preferences } = useQuery({
+    queryKey: ["student-preferences-builder", userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      await ensureStudentPreferences(userId);
+
+      const { data, error } = await supabase
+        .from("student_preferences")
+        .select("*")
+        .eq("student_id", userId)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data ?? null;
+    },
+  });
+
   const subjects = useMemo(() => {
-    return [...new Set(templates.map((item) => item.subject).filter(Boolean))];
-  }, [templates]);
+    const allSubjects = [...new Set(templates.map((item) => item.subject).filter(Boolean))];
+    const preferredSubjects = Array.isArray(preferences?.subjects)
+      ? preferences.subjects
+      : [];
+
+    if (preferredSubjects.length === 0) {
+      return allSubjects;
+    }
+
+    const normalizedPreferred = preferredSubjects.map((subject) => subject.toLowerCase());
+
+    const preferred = allSubjects.filter((subject) =>
+      normalizedPreferred.includes(subject.toLowerCase())
+    );
+
+    const others = allSubjects.filter(
+      (subject) => !normalizedPreferred.includes(subject.toLowerCase())
+    );
+
+    return [...preferred, ...others];
+  }, [templates, preferences]);
 
   const currentTemplates = useMemo(() => {
     return templates.filter((item) => item.subject === selectedSubject);
@@ -119,20 +159,35 @@ export default function QuestionBuilder() {
 
         {!selectedSubject ? (
           <div className="grid md:grid-cols-2 gap-4">
-            {subjects.map((subject) => (
-              <Card
-                key={subject}
-                className="bg-white border-[#2E5C6E]/20 cursor-pointer hover:border-[#0CC0DF] transition-colors"
-                onClick={() => setSelectedSubject(subject)}
-              >
-                <CardContent className="py-6">
-                  <h3 className="text-lg font-semibold text-[#1E1E1E]">{subject}</h3>
-                  <p className="text-sm text-[#2E5C6E] mt-2">
-                    Open templates
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
+            {subjects.map((subject) => {
+              const isPreferred =
+                Array.isArray(preferences?.subjects) &&
+                preferences.subjects.some(
+                  (item) => item.toLowerCase() === subject.toLowerCase()
+                );
+
+              return (
+                <Card
+                  key={subject}
+                  className="bg-white border-[#2E5C6E]/20 cursor-pointer hover:border-[#0CC0DF] transition-colors"
+                  onClick={() => setSelectedSubject(subject)}
+                >
+                  <CardContent className="py-6">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-lg font-semibold text-[#1E1E1E]">{subject}</h3>
+                      {isPreferred && (
+                        <span className="text-xs px-2 py-1 rounded-full bg-[#0CC0DF]/10 text-[#0CC0DF]">
+                          Preferred
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-[#2E5C6E] mt-2">
+                      Open templates
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            })}
 
             {subjects.length === 0 && (
               <Card>

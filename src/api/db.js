@@ -5,6 +5,7 @@ const TABLE = {
   Challenge: 'challenges',
   ChallengeDay: 'challenge_days',
   StudentProgress: 'student_progress',
+  StudentPreferences: 'student_preferences',
   School: 'schools',
   SchoolPlan: 'school_plans',
   StudentCredential: 'student_accounts',
@@ -94,11 +95,7 @@ export async function upsertStudentProgress(progress) {
     .select('*')
     .single()
 
-  if (error) {
-    console.error('upsertStudentProgress error:', error)
-    throw error
-  }
-
+  if (error) throw error
   return data ?? null
 }
 
@@ -114,4 +111,41 @@ export async function listRecentProgress(userId) {
 
   if (error) throw error
   return data ?? []
+}
+
+export async function getStudentPreferences(userId) {
+  if (!userId) return null
+
+  const { data, error } = await supabase
+    .from(TABLE.StudentPreferences)
+    .select('*')
+    .eq('student_id', userId)
+    .maybeSingle()
+
+  if (error) throw error
+  return data ?? null
+}
+
+export async function ensureStudentPreferences(userId) {
+  if (!userId) return null
+
+  const existing = await getStudentPreferences(userId)
+  if (existing) return existing
+
+  const payload = {
+    student_id: userId,
+    display_name: null,
+    subjects: [],
+    bookmark_enabled: true,
+    progress_display_mode: 'both',
+  }
+
+  const { data, error } = await supabase
+    .from(TABLE.StudentPreferences)
+    .insert(payload)
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data ?? null
 }

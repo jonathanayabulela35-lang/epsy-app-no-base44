@@ -1,9 +1,11 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ensureStudentPreferences } from "@/api/db";
 
 function Section({ title, children }) {
   const [open, setOpen] = useState(false);
@@ -39,6 +41,8 @@ function Section({ title, children }) {
 
 export default function QuestionDecoder() {
   const [selectedSubject, setSelectedSubject] = useState(null);
+  const { user } = useAuth();
+  const userId = user?.id;
 
   const {
     data: decoderSubjects = [],
@@ -58,7 +62,47 @@ export default function QuestionDecoder() {
     },
   });
 
-  const current = decoderSubjects.find((item) => item.id === selectedSubject);
+  const { data: preferences } = useQuery({
+    queryKey: ["student-preferences-decoder", userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      await ensureStudentPreferences(userId);
+
+      const { data, error } = await supabase
+        .from("student_preferences")
+        .select("*")
+        .eq("student_id", userId)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data ?? null;
+    },
+  });
+
+  const prioritizedSubjects = useMemo(() => {
+    const preferredSubjects = Array.isArray(preferences?.subjects)
+      ? preferences.subjects
+      : [];
+
+    if (preferredSubjects.length === 0) {
+      return decoderSubjects;
+    }
+
+    const normalizedPreferred = preferredSubjects.map((s) => s.toLowerCase());
+
+    const preferred = decoderSubjects.filter((item) =>
+      normalizedPreferred.includes((item.subject || "").toLowerCase())
+    );
+
+    const others = decoderSubjects.filter(
+      (item) =>
+        !normalizedPreferred.includes((item.subject || "").toLowerCase())
+    );
+
+    return [...preferred, ...others];
+  }, [decoderSubjects, preferences]);
+
+  const current = prioritizedSubjects.find((item) => item.id === selectedSubject);
 
   if (isLoading) {
     return <div className="p-8">Loading...</div>;
@@ -80,22 +124,40 @@ export default function QuestionDecoder() {
 
         {!selectedSubject ? (
           <div className="grid md:grid-cols-2 gap-4">
-            {decoderSubjects.map((item) => (
-              <Card
-                key={item.id}
-                className="bg-white border-[#2E5C6E]/20 cursor-pointer hover:border-[#0CC0DF] transition-colors"
-                onClick={() => setSelectedSubject(item.id)}
-              >
-                <CardContent className="py-6">
-                  <h3 className="text-lg font-semibold text-[#1E1E1E]">{item.subject}</h3>
-                  <p className="text-sm text-[#2E5C6E] mt-2">
-                    Open subject decoder
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
+            {prioritizedSubjects.map((item) => {
+              const isPreferred =
+                Array.isArray(preferences?.subjects) &&
+                preferences.subjects.some(
+                  (subject) =>
+                    subject.toLowerCase() === (item.subject || "").toLowerCase()
+                );
 
-            {decoderSubjects.length === 0 && (
+              return (
+                <Card
+                  key={item.id}
+                  className="bg-white border-[#2E5C6E]/20 cursor-pointer hover:border-[#0CC0DF] transition-colors"
+                  onClick={() => setSelectedSubject(item.id)}
+                >
+                  <CardContent className="py-6">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-lg font-semibold text-[#1E1E1E]">
+                        {item.subject}
+                      </h3>
+                      {isPreferred && (
+                        <span className="text-xs px-2 py-1 rounded-full bg-[#0CC0DF]/10 text-[#0CC0DF]">
+                          Preferred
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-[#2E5C6E] mt-2">
+                      Open subject decoder
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            })}
+
+            {prioritizedSubjects.length === 0 && (
               <Card>
                 <CardContent className="py-8 text-[#2E5C6E]">
                   No published decoder subjects yet.

@@ -7,7 +7,8 @@ import { createPageUrl } from '@/utils';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
-import { listRecentProgress } from '@/api/db';
+import { listRecentProgress, ensureStudentPreferences } from '@/api/db';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function Home() {
   const { user } = useAuth();
@@ -19,6 +20,26 @@ export default function Home() {
   const { data: progress = [] } = useQuery({
     queryKey: ['student-progress'],
     queryFn: () => listRecentProgress(userId),
+    enabled: !!userId,
+  });
+
+  const { data: preferences } = useQuery({
+    queryKey: ['student-preferences', userId],
+    queryFn: async () => {
+      if (!userId) return null;
+
+      await ensureStudentPreferences(userId);
+
+      const { data, error } = await supabase
+        .from('student_preferences')
+        .select('*')
+        .eq('student_id', userId)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      return data;
+    },
     enabled: !!userId,
   });
 
@@ -46,17 +67,17 @@ export default function Home() {
     },
   ];
 
-  const displayName = user?.user_metadata?.display_name || user?.user_metadata?.full_name?.split(' ')[0] || '';
-  const greeting = displayName ? `Welcome back, ${displayName}.` : 'Welcome back.';
+  const displayName = preferences?.display_name;
+  const greeting = displayName
+    ? `Welcome back, ${displayName}.`
+    : 'Welcome back.';
 
-  // Redirect school admin to school dashboard (but not epsy_admin)
   React.useEffect(() => {
     if (userRole === 'school_admin') {
       navigate(createPageUrl('SchoolDashboard'));
     }
   }, [userRole, navigate]);
 
-  // Block school_admin from accessing student pages
   if (userRole === 'school_admin') {
     return null;
   }
@@ -64,7 +85,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#F1F4F6] px-4 md:px-8 py-8 pb-24">
       <div className="max-w-4xl mx-auto">
-        {/* Welcome */}
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -73,24 +94,33 @@ export default function Home() {
           <h1 className="text-3xl md:text-4xl font-bold text-black mb-3">
             {greeting}
           </h1>
+
           <p className="text-xl text-[#2E5C6E]">
             It's All About Mentality.
           </p>
         </motion.div>
 
-        {/* Active Progress */}
         {progress.length > 0 && (
           <div className="mb-8">
-            <h2 className="text-lg font-semibold text-[#1E1E1E] mb-4">Continue Your Journey</h2>
+            <h2 className="text-lg font-semibold text-[#1E1E1E] mb-4">
+              Continue Your Journey
+            </h2>
+
             <div className="space-y-3">
               {progress.slice(0, 2).map((item) => (
                 <Link key={item.id} to={createPageUrl(`ChallengeView?id=${item.challenge_id}`)}>
                   <Card className="bg-white border-[#2E5C6E]/20 hover:border-[#0CC0DF]/40 transition-all cursor-pointer">
                     <CardContent className="p-4 flex items-center justify-between">
                       <div>
-                        <p className="font-medium text-[#1E1E1E]">{item.code_name || 'Your Challenge'}</p>
-                        <p className="text-sm text-[#2E5C6E]">Day {item.current_day}</p>
+                        <p className="font-medium text-[#1E1E1E]">
+                          {item.code_name || 'Your Challenge'}
+                        </p>
+
+                        <p className="text-sm text-[#2E5C6E]">
+                          Day {item.current_day}
+                        </p>
                       </div>
+
                       <ChevronRight className="w-5 h-5 text-[#2E5C6E]" />
                     </CardContent>
                   </Card>
@@ -100,8 +130,10 @@ export default function Home() {
           </div>
         )}
 
-        {/* Main Features */}
-        <h2 className="text-lg font-semibold text-[#1E1E1E] mb-4">Explore</h2>
+        <h2 className="text-lg font-semibold text-[#1E1E1E] mb-4">
+          Explore
+        </h2>
+
         <div className="grid md:grid-cols-3 gap-4">
           {features.map((feature, idx) => (
             <motion.div
@@ -113,24 +145,29 @@ export default function Home() {
               <Link to={createPageUrl(feature.link)}>
                 <Card className="bg-white border-[#2E5C6E]/20 hover:border-[#0CC0DF]/40 transition-all h-full cursor-pointer group">
                   <CardHeader>
-                    <div 
+
+                    <div
                       className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
                       style={{ backgroundColor: feature.color }}
                     >
                       <feature.icon className="w-6 h-6 text-white" />
                     </div>
+
                     <CardTitle className="text-[#1E1E1E] text-base mb-2 group-hover:text-[#0CC0DF] transition-colors">
                       {feature.title}
                     </CardTitle>
+
                     <p className="text-sm text-[#2E5C6E] leading-relaxed">
                       {feature.description}
                     </p>
+
                   </CardHeader>
                 </Card>
               </Link>
             </motion.div>
           ))}
         </div>
+
       </div>
     </div>
   );
