@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,13 +11,33 @@ const emptyForm = {
   username: "",
   pin: "",
   role: "student",
-  full_name: "",
-  display_name: "",
   grade: "",
   school_id: "",
   access_status: "active",
   status: "unused",
 };
+
+function generateRandomPin() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function extractUsernameNumber(username, schoolCode) {
+  if (!username || !schoolCode) return null;
+
+  const normalizedUsername = username.toLowerCase();
+  const normalizedSchoolCode = schoolCode.toLowerCase();
+
+  if (!normalizedUsername.startsWith(normalizedSchoolCode)) return null;
+
+  const suffix = normalizedUsername.slice(normalizedSchoolCode.length);
+  if (!/^\d+$/.test(suffix)) return null;
+
+  return Number(suffix);
+}
+
+function buildUsername(schoolCode, number) {
+  return `${schoolCode.toLowerCase()}${String(number).padStart(3, "0")}`;
+}
 
 export default function AdminStudentAccess() {
   const queryClient = useQueryClient();
@@ -47,58 +67,11 @@ export default function AdminStudentAccess() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("schools")
-        .select("id, name, school_code")
+        .select("id, name, school_code, seat_limit, seats_generated")
         .order("name", { ascending: true });
 
       if (error) throw error;
       return data ?? [];
-    },
-  });
-
-  const saveMutation = useMutation({
-    mutationFn: async (currentForm) => {
-      const payload = {
-        username: currentForm.username.trim().toLowerCase(),
-        pin: currentForm.pin.trim(),
-        role: currentForm.role,
-        full_name: currentForm.full_name.trim(),
-        display_name: currentForm.display_name.trim(),
-        grade: currentForm.grade.trim(),
-        school_id: currentForm.school_id || null,
-        access_status: currentForm.access_status,
-        status: currentForm.status,
-      };
-
-      if (currentForm.id) {
-        const { data, error } = await supabase
-          .from("student_accounts")
-          .update(payload)
-          .eq("id", currentForm.id)
-          .select()
-          .single();
-
-        if (error) throw error;
-        return data;
-      }
-
-      const { data, error } = await supabase
-        .from("student_accounts")
-        .insert(payload)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      setUiError("");
-      setUiSuccess("Account saved successfully.");
-      queryClient.invalidateQueries({ queryKey: ["admin-student-accounts"] });
-      setForm(emptyForm);
-    },
-    onError: (error) => {
-      setUiSuccess("");
-      setUiError(error?.message || "Failed to save account.");
     },
   });
 
@@ -109,6 +82,140 @@ export default function AdminStudentAccess() {
     }
     return map;
   }, [schools]);
+
+  const selectedSchool = form.school_id ? schoolMap[form.school_id] : null;
+
+  const getNextUsernameForSchool = (schoolId) => {
+    const school = schoolMap[schoolId];
+    if (!school?.school_code) return "";
+
+    const usedNumbers = studentAccounts
+      .filter((account) => account.school_id === schoolId)
+      .map((account) => extractUsernameNumber(account.username, school.school_code))
+      .filter((num) => Number.isInteger(num));
+
+    let nextNumber = 1;
+    while (usedNumbers.includes(nextNumber)) {
+      nextNumber += 1;
+    }
+
+    return buildUsername(school.school_code, nextNumber);
+  };
+
+  useEffect(() => {
+    if (!form.school_id) {
+      return;
+    }
+
+    if (form.id) {
+      return;
+    }
+
+    const nextUsername = getNextUsernameForSchool(form.school_id);
+
+    setForm((prev) => {
+      if (prev.school_id !== form.school_id) return prev;
+
+      return {
+        ...prev,
+        username: nextUsername,
+        pin: generateRandomPin(),
+      };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.school_id, form.id, studentAccounts, schools]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (currentForm) => {
+      const payload = {
+        username: currentForm.username.trim().toLowerCase(),
+        pin: currentForm.pin.trim(),
+        role: currentForm.role,
+        grade: currentForm.grade.trim(),
+        school_id: currentForm.school_id || null,
+        access_status: currentForm.access_status,
+        status: currentForm.status,
+      };
+
+      let savedAccount;
+
+      if (currentForm.id) {
+        const { data, error } = await supabase
+          .from("student_accounts")
+          .update(payload)
+          .eq("id", currentForm.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        savedAccount = data;
+      } else {
+        const { data, error } = await supabase
+          .from("student_accounts")
+          .insert(payload)
+          .select()
+          .single();
+
+        if (error) throw error;
+        savedAccount = data;
+
+        if (currentForm.school_id) {
+          const school = schoolMap[currentForm.school_id];
+          const nextSeatsGenerated = Number(school?.seats_generated || 0) + 1;
+
+          const { error: schoolUpdateError } = await supabase
+            .from("schools")
+            .update({ seats_generated: nextSeatsGenerated })
+            .eq("id", currentForm.school_id);
+
+          if (schoolUpdateError) throw schoolUpdateError;
+        }
+      }
+
+      return savedAccount;
+    },
+    onSuccess: (_, variables) => {
+      setUiError("");
+      setUiSuccess("Account saved successfully.");
+
+      queryClient.invalidateQueries({ queryKey: ["admin-student-accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-schools-for-student-access"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-schools"] });
+
+      if (variables.id) {
+        setForm(emptyForm);
+        return;
+      }
+
+      const preservedSchoolId = variables.school_id;
+      const preservedRole = variables.role;
+      const preservedGrade = variables.grade;
+      const preservedAccessStatus = variables.access_status;
+      const preservedStatus = variables.status;
+
+      if (!preservedSchoolId) {
+        setForm(emptyForm);
+        return;
+      }
+
+      const nextUsername = getNextUsernameForSchool(preservedSchoolId);
+
+      setForm({
+        id: null,
+        username: nextUsername,
+        pin: generateRandomPin(),
+        role: preservedRole,
+        grade: preservedGrade,
+        school_id: preservedSchoolId,
+        access_status: preservedAccessStatus,
+        status: preservedStatus,
+      });
+    },
+    onError: (error) => {
+      setUiSuccess("");
+      setUiError(error?.message || "Failed to save account.");
+    },
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -125,8 +232,6 @@ export default function AdminStudentAccess() {
       username: student.username ?? "",
       pin: student.pin ?? "",
       role: student.role ?? "student",
-      full_name: student.full_name ?? "",
-      display_name: student.display_name ?? "",
       grade: student.grade ?? "",
       school_id: student.school_id ?? "",
       access_status: student.access_status ?? "active",
@@ -134,6 +239,22 @@ export default function AdminStudentAccess() {
     });
 
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const regenerateCredentials = () => {
+    if (!form.school_id) {
+      setUiError("Please select a school first.");
+      return;
+    }
+
+    setUiError("");
+    setUiSuccess("");
+
+    setForm((prev) => ({
+      ...prev,
+      username: getNextUsernameForSchool(prev.school_id),
+      pin: generateRandomPin(),
+    }));
   };
 
   return (
@@ -165,50 +286,31 @@ export default function AdminStudentAccess() {
           <CardContent>
             <form onSubmit={handleSubmit} className="grid md:grid-cols-2 gap-4">
               <div>
-                <Label>Username</Label>
-                <Input
-                  value={form.username}
-                  onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
-                  placeholder="e.g. aya01"
-                  required
-                />
-              </div>
-
-              <div>
-                <Label>PIN</Label>
-                <Input
-                  value={form.pin}
-                  onChange={(e) => setForm((prev) => ({ ...prev, pin: e.target.value }))}
-                  placeholder="e.g. 1234"
-                  required
-                />
-              </div>
-
-              <div>
-                <Label>Full Name</Label>
-                <Input
-                  value={form.full_name}
-                  onChange={(e) => setForm((prev) => ({ ...prev, full_name: e.target.value }))}
-                  placeholder="Student full name"
-                />
-              </div>
-
-              <div>
-                <Label>Display Name</Label>
-                <Input
-                  value={form.display_name}
-                  onChange={(e) => setForm((prev) => ({ ...prev, display_name: e.target.value }))}
-                  placeholder="Optional display name"
-                />
-              </div>
-
-              <div>
-                <Label>Grade</Label>
-                <Input
-                  value={form.grade}
-                  onChange={(e) => setForm((prev) => ({ ...prev, grade: e.target.value }))}
-                  placeholder="e.g. Grade 10"
-                />
+                <Label>School</Label>
+                <select
+                  value={form.school_id}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      school_id: e.target.value,
+                      id: null,
+                    }))
+                  }
+                  className="w-full border rounded-md px-3 py-2 bg-white"
+                >
+                  <option value="">No school selected</option>
+                  {schools.map((school) => (
+                    <option key={school.id} value={school.id}>
+                      {school.name}
+                    </option>
+                  ))}
+                </select>
+                {selectedSchool && (
+                  <p className="text-xs text-[#2E5C6E] mt-2">
+                    School code: {selectedSchool.school_code || "—"} • Seats used:{" "}
+                    {selectedSchool.seats_generated ?? 0}/{selectedSchool.seat_limit ?? 0}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -224,19 +326,12 @@ export default function AdminStudentAccess() {
               </div>
 
               <div>
-                <Label>School</Label>
-                <select
-                  value={form.school_id}
-                  onChange={(e) => setForm((prev) => ({ ...prev, school_id: e.target.value }))}
-                  className="w-full border rounded-md px-3 py-2 bg-white"
-                >
-                  <option value="">No school selected</option>
-                  {schools.map((school) => (
-                    <option key={school.id} value={school.id}>
-                      {school.name}
-                    </option>
-                  ))}
-                </select>
+                <Label>Grade</Label>
+                <Input
+                  value={form.grade}
+                  onChange={(e) => setForm((prev) => ({ ...prev, grade: e.target.value }))}
+                  placeholder="e.g. Grade 10"
+                />
               </div>
 
               <div>
@@ -266,7 +361,36 @@ export default function AdminStudentAccess() {
                 </select>
               </div>
 
-              <div className="md:col-span-2 flex gap-3">
+              <div></div>
+
+              <div>
+                <Label>Username</Label>
+                <Input
+                  value={form.username}
+                  onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
+                  placeholder="Auto-generated from school"
+                  required
+                />
+              </div>
+
+              <div>
+                <Label>PIN</Label>
+                <Input
+                  type="password"
+                  value={form.pin}
+                  onChange={(e) => setForm((prev) => ({ ...prev, pin: e.target.value }))}
+                  placeholder="Auto-generated 6-digit PIN"
+                  required
+                />
+              </div>
+
+              <div className="md:col-span-2 flex gap-3 flex-wrap">
+                {!form.id && (
+                  <Button type="button" variant="outline" onClick={regenerateCredentials}>
+                    Regenerate Username and PIN
+                  </Button>
+                )}
+
                 <Button
                   type="submit"
                   disabled={saveMutation.isPending}
@@ -299,7 +423,7 @@ export default function AdminStudentAccess() {
             <Card key={student.id} className="border-[#2E5C6E]/15">
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg text-[#1E1E1E]">
-                  {student.display_name || student.full_name || student.username}
+                  {student.username}
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-[#2E5C6E] space-y-1">
@@ -313,7 +437,7 @@ export default function AdminStudentAccess() {
                 </p>
                 <p>Status: {student.status || "unused"}</p>
                 <p>Access Status: {student.access_status || "active"}</p>
-                <p>Last Login: {student.last_login_at || "—"}</p>
+                <p>PIN: {student.pin || "—"}</p>
 
                 <div className="pt-2">
                   <Button variant="outline" onClick={() => editStudent(student)}>
