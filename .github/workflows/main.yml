@@ -6,6 +6,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
 
     steps:
       - name: Checkout repository
@@ -41,11 +43,14 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Prepare Gradle directory
+        run: mkdir -p "$GITHUB_WORKSPACE/.gradle"
+
       - name: Build Android bundle
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew bundleRelease
+          ./gradlew --no-daemon clean bundleRelease
 
       - name: Upload bundle
         uses: actions/upload-artifact@v4
