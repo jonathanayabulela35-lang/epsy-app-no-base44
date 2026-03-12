@@ -25,6 +25,9 @@ jobs:
       - name: Build web app
         run: npm run build
 
+      - name: Add Android Platform
+        run: npx cap add android
+
       - name: Sync Capacitor
         run: npx capacitor sync android
 
