@@ -45,6 +45,15 @@ jobs:
           sed -i 's/gradle-8.2.1-all.zip/gradle-8.5-all.zip/g' android/gradle/wrapper/gradle-wrapper.properties
           cat android/gradle/wrapper/gradle-wrapper.properties
 
+      - name: Force Android SDK versions
+        run: |
+          if [ -f android/variables.gradle ]; then
+            sed -i 's/compileSdkVersion = .*/compileSdkVersion = 35/' android/variables.gradle
+            sed -i 's/targetSdkVersion = .*/targetSdkVersion = 35/' android/variables.gradle
+            sed -i 's/minSdkVersion = .*/minSdkVersion = 23/' android/variables.gradle || true
+            cat android/variables.gradle
+          fi
+
       - name: Force compatible Kotlin versions
         run: |
           cat <<'EOF' >> android/build.gradle
