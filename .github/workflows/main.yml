@@ -40,6 +40,21 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
+      - name: Force compatible Bouncy Castle version
+        run: |
+          cat <<'EOF' >> android/build.gradle
+
+          allprojects {
+              configurations.all {
+                  resolutionStrategy {
+                      force 'org.bouncycastle:bcprov-jdk18on:1.78.1'
+                      force 'org.bouncycastle:bcpkix-jdk18on:1.78.1'
+                      force 'org.bouncycastle:bcutil-jdk18on:1.78.1'
+                  }
+              }
+          }
+          EOF
+
       - name: Sync Capacitor
         run: npx cap sync android
 
