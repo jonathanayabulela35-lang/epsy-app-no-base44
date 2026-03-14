@@ -1,0 +1,95 @@
+name: Build Android App Bundle
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install Capacitor tools
+        run: npm install @capacitor/core @capacitor/cli @capacitor/android
+
+      - name: Initialize Capacitor
+        run: npx cap init EpsyApp com.epsy.app --web-dir=dist
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Upgrade Gradle wrapper
+        run: |
+          sed -i 's/gradle-8.2.1-all.zip/gradle-8.5-all.zip/g' android/gradle/wrapper/gradle-wrapper.properties
+          cat android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Force Android SDK versions
+        run: |
+          if [ -f android/variables.gradle ]; then
+            sed -i 's/compileSdkVersion = .*/compileSdkVersion = 35/' android/variables.gradle
+            sed -i 's/targetSdkVersion = .*/targetSdkVersion = 35/' android/variables.gradle
+            sed -i 's/minSdkVersion = .*/minSdkVersion = 23/' android/variables.gradle || true
+            cat android/variables.gradle
+          fi
+
+      - name: Force compatible Kotlin versions
+        run: |
+          cat <<'EOF' >> android/build.gradle
+
+          allprojects {
+              configurations.all {
+                  resolutionStrategy.eachDependency { details ->
+                      if (details.requested.group == 'org.jetbrains.kotlin') {
+                          if (details.requested.name in [
+                              'kotlin-stdlib',
+                              'kotlin-stdlib-jdk7',
+                              'kotlin-stdlib-jdk8',
+                              'kotlin-reflect'
+                          ]) {
+                              details.useVersion '1.8.22'
+                          }
+                      }
+                  }
+              }
+          }
+          EOF
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Prepare Gradle directory
+        run: mkdir -p "$GITHUB_WORKSPACE/.gradle"
+
+      - name: Build Android bundle
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew --no-daemon bundleRelease --stacktrace
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: epsy-app-bundle
+          path: android/app/build/outputs/bundle/release/*.aab
