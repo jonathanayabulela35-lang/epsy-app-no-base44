@@ -34,9 +34,6 @@ jobs:
       - name: Install Capacitor tools
         run: npm install @capacitor/core @capacitor/cli @capacitor/android
 
-      - name: Add Android platform
-        run: npx cap add android
-
       - name: Upgrade Gradle wrapper
         run: |
           sed -i 's/gradle-8.2.1-all.zip/gradle-8.5-all.zip/g' android/gradle/wrapper/gradle-wrapper.properties
