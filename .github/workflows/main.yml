@@ -34,9 +34,6 @@ jobs:
       - name: Install Capacitor tools
         run: npm install @capacitor/core @capacitor/cli @capacitor/android
 
-      - name: Initialize Capacitor
-        run: npx cap init EpsyApp com.epsy.app --web-dir=dist
-
       - name: Add Android platform
         run: npx cap add android
 
