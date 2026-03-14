@@ -82,8 +82,20 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon bundleRelease --stacktrace
 
+      - name: Build Android APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease --stacktrace
+
       - name: Upload bundle
         uses: actions/upload-artifact@v4
         with:
           name: epsy-app-bundle
           path: android/app/build/outputs/bundle/release/*.aab
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: epsy-app-apk
+          path: android/app/build/outputs/apk/release/*.apk
