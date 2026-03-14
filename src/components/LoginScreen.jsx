@@ -49,10 +49,7 @@ export default function LoginScreen() {
 
       window.location.href = redirect;
 
-<<<<<<< HEAD
       navigate("/", { replace: true });
-=======
->>>>>>> 1fb179341d1965a5d0bf6dcf6410429d82786bdb
     } catch (err) {
       setError(err?.message || "Login failed");
     } finally {
