@@ -1,0 +1,20 @@
+{
+  "name": "Epsy App",
+  "short_name": "Epsy",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F1F4F6",
+  "theme_color": "#0CC0DF",
+  "icons": [
+    {
+      "src": "/app-icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/app-icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -3,14 +3,12 @@ import { supabase } from "@/lib/supabaseClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
 
 export default function LoginScreen() {
   const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const navigate = useNavigate();
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -25,16 +23,36 @@ export default function LoginScreen() {
         throw new Error("Please enter your username and PIN.");
       }
 
-      const email = `${cleanUsername}@epsy.invalid`;
-
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password: cleanPin,
+      const { data, error: fnError } = await supabase.functions.invoke("login-with-pin", {
+        body: {
+          username: cleanUsername,
+          pin: cleanPin,
+        },
       });
 
-      if (signInError) throw signInError;
+      if (fnError) {
+        throw new Error(fnError.message || "Login failed.");
+      }
 
+      if (!data?.success) {
+        throw new Error(data?.error || "Login failed.");
+      }
+
+      localStorage.setItem("epsy_user", JSON.stringify(data.student));
+
+      const role = data?.student?.role;
+
+      const redirect =
+        role === "epsy_admin"
+          ? "/AdminHome"
+          : "/";
+
+      window.location.href = redirect;
+
+<<<<<<< HEAD
       navigate("/", { replace: true });
+=======
+>>>>>>> 1fb179341d1965a5d0bf6dcf6410429d82786bdb
     } catch (err) {
       setError(err?.message || "Login failed");
     } finally {
@@ -74,7 +92,7 @@ export default function LoginScreen() {
                 onChange={(e) => setPin(e.target.value)}
                 placeholder="••••••"
                 inputMode="numeric"
-                autoComplete="current-password"
+                autoComplete="off"
               />
             </div>
 

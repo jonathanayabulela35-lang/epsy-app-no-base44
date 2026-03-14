@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, ChevronDown, ChevronRight, Check, MoreVertical } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -28,24 +27,60 @@ import {
   upsertStudentProgress,
 } from '@/api/db';
 
+function normalizeExecutionOverview(executionOverview = []) {
+  return executionOverview.map((step, index) => {
+    if (typeof step === "string") {
+      const match = step.match(/^day\s*(\d+)\s*[-:]\s*(.*)$/i);
+      if (match) {
+        return {
+          day: Number(match[1]),
+          label: match[2]?.trim() || `Day ${match[1]}`,
+        };
+      }
+
+      return {
+        day: index + 1,
+        label: step,
+      };
+    }
+
+    if (step && typeof step === "object") {
+      return {
+        day: Number(step.day) || index + 1,
+        label: step.label || `Day ${Number(step.day) || index + 1}`,
+      };
+    }
+
+    return {
+      day: index + 1,
+      label: `Day ${index + 1}`,
+    };
+  });
+}
+
 export default function ChallengeView() {
   const urlParams = new URLSearchParams(window.location.search);
   const challengeId = urlParams.get('id');
+
   const [expandedSection, setExpandedSection] = useState(null);
   const [selectedDay, setSelectedDay] = useState(null);
   const [showCodeNameDialog, setShowCodeNameDialog] = useState(false);
   const [showEditCodeNameDialog, setShowEditCodeNameDialog] = useState(false);
   const [codeName, setCodeName] = useState('');
   const [editCodeName, setEditCodeName] = useState('');
-  const [showNotesDialog, setShowNotesDialog] = useState(false);
-  const [notes, setNotes] = useState('');
-  const queryClient = useQueryClient();
+  const [uiError, setUiError] = useState('');
 
+  const queryClient = useQueryClient();
   const { user } = useAuth();
-  const userRole = user?.user_metadata?.role || user?.app_metadata?.role;
+
+  const userRole =
+    user?.role ||
+    user?.user_metadata?.role ||
+    user?.app_metadata?.role;
+
   const userId = user?.id;
 
-  const { data: challenge } = useQuery({
+  const { data: challenge, isLoading: challengeLoading } = useQuery({
     queryKey: ['challenge', challengeId],
     queryFn: () => getChallengeById(challengeId),
     enabled: !!challengeId,
@@ -68,7 +103,7 @@ export default function ChallengeView() {
   });
 
   const { data: progress } = useQuery({
-    queryKey: ['progress', challengeId],
+    queryKey: ['progress', challengeId, userId],
     queryFn: () => getStudentProgress({ userId, challengeId }),
     enabled: !!challengeId && !!userId,
   });
@@ -76,28 +111,55 @@ export default function ChallengeView() {
   const startMutation = useMutation({
     mutationFn: (data) => upsertStudentProgress(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['progress', challengeId] });
+      queryClient.invalidateQueries({ queryKey: ['progress', challengeId, userId] });
       setShowCodeNameDialog(false);
+      setCodeName('');
+      setUiError('');
+    },
+    onError: (error) => {
+      setUiError(error?.message || 'Failed to start journey.');
     },
   });
 
   const updateProgressMutation = useMutation({
     mutationFn: (data) => upsertStudentProgress(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['progress', challengeId] });
+      queryClient.invalidateQueries({ queryKey: ['progress', challengeId, userId] });
+      setUiError('');
+    },
+    onError: (error) => {
+      setUiError(error?.message || 'Failed to update progress.');
     },
   });
 
+  const executionSteps = useMemo(
+    () => normalizeExecutionOverview(challenge?.execution_overview || []),
+    [challenge?.execution_overview]
+  );
+
+  if (userRole === 'school_admin') {
+    return (
+      <div className="min-h-screen bg-[#F1F4F6] p-8 flex items-center justify-center">
+        <p className="text-[#2E5C6E]">Access denied</p>
+      </div>
+    );
+  }
+
   const handleStart = () => {
+    setUiError('');
     setShowCodeNameDialog(true);
   };
 
   const confirmStart = () => {
-    if (!codeName.trim()) return;
+    if (!codeName.trim() || !userId || !challengeId) {
+      setUiError('Missing code name, student id, or challenge id.');
+      return;
+    }
+
     startMutation.mutate({
-      linked_user_id: userId,
+      user_id: userId,
       challenge_id: challengeId,
-      code_name: codeName,
+      code_name: codeName.trim(),
       current_day: 1,
       completed_days: [],
       started_date: new Date().toISOString(),
@@ -107,7 +169,15 @@ export default function ChallengeView() {
 
   const handleDayComplete = (dayNumber) => {
     if (!progress) return;
-    const completedDays = [...(progress.completed_days || []), dayNumber];
+
+    const existingCompleted = Array.isArray(progress.completed_days)
+      ? progress.completed_days
+      : [];
+
+    const completedDays = existingCompleted.includes(dayNumber)
+      ? existingCompleted
+      : [...existingCompleted, dayNumber];
+
     updateProgressMutation.mutate({
       ...progress,
       completed_days: completedDays,
@@ -116,26 +186,21 @@ export default function ChallengeView() {
     });
   };
 
-  const handleSaveNotes = () => {
-    if (!progress) return;
-    updateProgressMutation.mutate({
-      ...progress,
-      personal_notes: notes,
-    });
-    setShowNotesDialog(false);
-  };
-
   const handleEditCodeName = () => {
+    setUiError('');
     setEditCodeName(progress?.code_name || '');
     setShowEditCodeNameDialog(true);
   };
 
   const handleSaveCodeName = () => {
     if (!progress || !editCodeName.trim()) return;
+
     updateProgressMutation.mutate({
       ...progress,
-      code_name: editCodeName,
+      code_name: editCodeName.trim(),
+      last_accessed: new Date().toISOString(),
     });
+
     setShowEditCodeNameDialog(false);
   };
 
@@ -147,7 +212,7 @@ export default function ChallengeView() {
     { key: 'full', label: 'Full Breakdown', content: challenge?.full_breakdown },
   ];
 
-  if (!challenge) {
+  if (challengeLoading || !challenge) {
     return <div className="p-8">Loading...</div>;
   }
 
@@ -195,9 +260,14 @@ export default function ChallengeView() {
               >
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-[#1E1E1E] text-base">{section.label}</CardTitle>
-                  <ChevronDown className={`w-5 h-5 text-[#2E5C6E] transition-transform ${expandedSection === section.key ? 'rotate-180' : ''}`} />
+                  <ChevronDown
+                    className={`w-5 h-5 text-[#2E5C6E] transition-transform ${
+                      expandedSection === section.key ? 'rotate-180' : ''
+                    }`}
+                  />
                 </div>
               </CardHeader>
+
               <AnimatePresence>
                 {expandedSection === section.key && (
                   <motion.div
@@ -206,7 +276,9 @@ export default function ChallengeView() {
                     exit={{ height: 0, opacity: 0 }}
                   >
                     <CardContent className="pt-0">
-                      <p className="text-[#1E1E1E] leading-relaxed whitespace-pre-wrap">{section.content}</p>
+                      <p className="text-[#1E1E1E] leading-relaxed whitespace-pre-wrap">
+                        {section.content}
+                      </p>
                     </CardContent>
                   </motion.div>
                 )}
@@ -223,13 +295,20 @@ export default function ChallengeView() {
             {!progress ? (
               <div className="text-center py-8">
                 <p className="text-[#2E5C6E] mb-4">Ready to start this journey?</p>
-                <Button onClick={handleStart} className="bg-[#0CC0DF] hover:bg-[#0AB0CF] text-white">
+                <Button
+                  onClick={handleStart}
+                  className="bg-[#0CC0DF] hover:bg-[#0AB0CF] text-white"
+                >
                   Start Challenge
                 </Button>
               </div>
+            ) : executionSteps.length === 0 ? (
+              <div className="text-center py-6 text-[#2E5C6E]">
+                No execution steps have been added for this challenge yet.
+              </div>
             ) : (
               <div className="space-y-3">
-                {challenge.execution_overview?.map((step) => (
+                {executionSteps.map((step) => (
                   <div
                     key={step.day}
                     className={`p-3 rounded-lg border cursor-pointer transition-all ${

@@ -2,13 +2,30 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+
+    <!-- Browser tab icon -->
+    <link rel="icon" type="image/png" href="/app-icon.png" />
+
+    <!-- iPhone / iPad Home Screen icon -->
+    <link rel="apple-touch-icon" href="/app-icon.png" />
+
+    <!-- Mobile scaling -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Browser / app theme color -->
+    <meta name="theme-color" content="#ffffff" />
+
+    <!-- PWA manifest -->
     <link rel="manifest" href="/manifest.json" />
-    <title>Base44 APP</title>
+
+    <!-- Default SPA title -->
+    <title>EpsyApp</title>
   </head>
+
   <body>
     <div id="root"></div>
+
+    <!-- Main React entry -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

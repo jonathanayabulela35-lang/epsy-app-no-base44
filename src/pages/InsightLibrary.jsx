@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ChevronRight, ArrowLeft } from 'lucide-react';
@@ -9,6 +9,11 @@ import { useAuth } from '@/lib/AuthContext';
 import { listPublishedChallenges } from '@/api/db';
 
 export default function InsightLibrary() {
+
+  useEffect(() => {
+    document.title = "EpsyApp | Insight Library";
+  }, []);
+
   const { user } = useAuth();
 
   const { data: challenges = [] } = useQuery({
@@ -30,10 +35,12 @@ export default function InsightLibrary() {
   return (
     <div className="min-h-screen bg-[#F1F4F6] px-4 md:px-8 py-8 pb-24">
       <div className="max-w-4xl mx-auto">
+
         <Link to={createPageUrl('Home')} className="inline-flex items-center text-black mb-6 hover:opacity-80">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Home
         </Link>
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -50,7 +57,9 @@ export default function InsightLibrary() {
         {challenges.length === 0 ? (
           <Card className="bg-white border-[#2E5C6E]/20">
             <CardContent className="p-12 text-center">
-              <p className="text-[#2E5C6E]">No challenges available yet. Check back soon!</p>
+              <p className="text-[#2E5C6E]">
+                No challenges available yet. Check back soon!
+              </p>
             </CardContent>
           </Card>
         ) : (
@@ -64,23 +73,32 @@ export default function InsightLibrary() {
               >
                 <Link to={createPageUrl(`ChallengeView?id=${challenge.id}`)}>
                   <Card className="bg-white border-[#2E5C6E]/20 hover:border-[#0CC0DF]/40 transition-all h-full cursor-pointer group">
+
                     <CardHeader>
+
                       <div className="flex items-start justify-between">
+
                         <div className="flex items-center gap-3 flex-1">
                           <span className="text-3xl">{challenge.icon}</span>
+
                           <CardTitle className="text-[#1E1E1E] group-hover:text-[#0CC0DF] transition-colors">
                             {challenge.title}
                           </CardTitle>
                         </div>
+
                         <ChevronRight className="w-5 h-5 text-[#2E5C6E] group-hover:text-[#0CC0DF] transition-colors flex-shrink-0" />
+
                       </div>
+
                     </CardHeader>
+
                   </Card>
                 </Link>
               </motion.div>
             ))}
           </div>
         )}
+
       </div>
     </div>
   );

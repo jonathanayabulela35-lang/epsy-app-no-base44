@@ -9,14 +9,17 @@ export default function Layout({ children, currentPageName }) {
 
   const isAdminPage = currentPageName?.startsWith('Admin');
   const isSchoolDashboard = currentPageName?.startsWith('School');
-  
-  const userRole = user?.user_metadata?.role || user?.app_metadata?.role || 'student';
+
+  const userRole =
+    user?.role ||
+    user?.user_metadata?.role ||
+    user?.app_metadata?.role ||
+    'student';
+
   const isStudent = userRole === 'student' || userRole === 'user';
-  const isSchoolAdmin = userRole === 'school_admin';
   const isEpsyAdmin = userRole === 'epsy_admin';
-  
+
   const showStudentNav = isStudent || isEpsyAdmin;
-  const showSchoolNav = isSchoolAdmin || isEpsyAdmin;
 
   const studentNav = [
     { name: 'Home', icon: Home, page: 'Home' },
@@ -27,14 +30,12 @@ export default function Layout({ children, currentPageName }) {
   ];
 
   const adminNav = [
+    { name: 'Dashboard', page: 'AdminHome' },
     { name: 'Challenges', page: 'AdminChallenges' },
     { name: 'Decoder', page: 'AdminDecoder' },
     { name: 'Builder', page: 'AdminBuilder' },
-  ];
-
-  const schoolNav = [
-    { name: 'Dashboard', page: 'SchoolDashboard' },
-    { name: 'Student Access', page: 'SchoolStudentAccess' },
+    { name: 'Schools', page: 'AdminSchools' },
+    { name: 'Student Access', page: 'AdminStudentAccess' },
   ];
 
   return (
@@ -42,8 +43,11 @@ export default function Layout({ children, currentPageName }) {
       <main>{children}</main>
 
       {/* Student Bottom Nav */}
-      {!isAdminPage && !isSchoolDashboard && showStudentNav && (
-        <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-white/90 backdrop-blur-lg" style={{ borderColor: '#2E5C6E' }}>
+      {!isAdminPage && showStudentNav && (
+        <nav
+          className="fixed bottom-0 left-0 right-0 z-50 border-t bg-white/90 backdrop-blur-lg"
+          style={{ borderColor: '#2E5C6E' }}
+        >
           <div className="flex items-center justify-around px-4 py-3 max-w-2xl mx-auto">
             {studentNav.map((item) => (
               <Link
@@ -54,8 +58,8 @@ export default function Layout({ children, currentPageName }) {
                   color: currentPageName === item.page ? '#0CC0DF' : '#78716C'
                 }}
               >
-                <item.icon 
-                  className="w-6 h-6 transition-transform group-active:scale-90 mb-1" 
+                <item.icon
+                  className="w-6 h-6 transition-transform group-active:scale-90 mb-1"
                   strokeWidth={currentPageName === item.page ? 2.5 : 2}
                 />
                 <span className="text-xs">{item.name}</span>
@@ -67,7 +71,10 @@ export default function Layout({ children, currentPageName }) {
 
       {/* Admin Top Nav */}
       {isAdminPage && (
-        <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-white" style={{ borderColor: '#2E5C6E' }}>
+        <nav
+          className="fixed top-0 left-0 right-0 z-50 border-b bg-white"
+          style={{ borderColor: '#2E5C6E' }}
+        >
           <div className="flex items-center gap-6 px-8 py-4">
             <span className="font-bold text-[#0CC0DF] text-lg">Epsy Admin</span>
             {adminNav.map((item) => (
@@ -82,35 +89,13 @@ export default function Layout({ children, currentPageName }) {
                 {item.name}
               </Link>
             ))}
-          </div>
-        </nav>
-      )}
 
-      {/* School Dashboard Top Nav */}
-      {isSchoolDashboard && showSchoolNav && (
-        <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-white" style={{ borderColor: '#2E5C6E' }}>
-          <div className="flex items-center gap-6 px-8 py-4">
-            <span className="font-bold text-[#0CC0DF] text-lg">School Portal</span>
-            {schoolNav.map((item) => (
-              <Link
-                key={item.name}
-                to={createPageUrl(item.page)}
-                className="text-sm font-medium transition-colors"
-                style={{
-                  color: currentPageName === item.page ? '#0CC0DF' : '#2E5C6E'
-                }}
-              >
-                {item.name}
-              </Link>
-            ))}
-            {isEpsyAdmin && (
-              <Link
-                to={createPageUrl('Home')}
-                className="ml-auto text-sm font-medium text-[#2E5C6E] hover:text-[#0CC0DF]"
-              >
-                → Student View
-              </Link>
-            )}
+            <Link
+              to={createPageUrl('Home')}
+              className="ml-auto text-sm font-medium text-[#2E5C6E] hover:text-[#0CC0DF]"
+            >
+              → Student View
+            </Link>
           </div>
         </nav>
       )}
