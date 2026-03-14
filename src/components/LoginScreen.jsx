@@ -34,7 +34,6 @@ export default function LoginScreen() {
 
       if (signInError) throw signInError;
 
-      // If login succeeds, AuthContext will update via onAuthStateChange.
       navigate("/", { replace: true });
     } catch (err) {
       setError(err?.message || "Login failed");
@@ -62,7 +61,7 @@ export default function LoginScreen() {
               <Input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="e.g. Kimberley"
+                placeholder="e.g. SCHL123"
                 autoComplete="username"
               />
             </div>

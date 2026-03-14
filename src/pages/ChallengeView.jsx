@@ -53,7 +53,6 @@ export default function ChallengeView() {
     refetchOnWindowFocus: true,
   });
 
-  // Block school_admin from student pages
   if (userRole === 'school_admin') {
     return (
       <div className="min-h-screen bg-[#F1F4F6] p-8 flex items-center justify-center">
@@ -155,18 +154,14 @@ export default function ChallengeView() {
   return (
     <div className="min-h-screen bg-[#F1F4F6] px-4 md:px-8 py-8 pb-24">
       <div className="max-w-4xl mx-auto">
-        <div className="flex gap-4 mb-6">
-          <Link to={createPageUrl('InsightLibrary')} className="inline-flex items-center text-black hover:opacity-80">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Library
-          </Link>
-          <Link to={createPageUrl('Home')} className="inline-flex items-center text-black hover:opacity-80">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Home
-          </Link>
-        </div>
+        <Link
+          to={createPageUrl('InsightLibrary')}
+          className="inline-flex items-center text-black mb-6 hover:opacity-80"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Library
+        </Link>
 
-        {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <span className="text-5xl">{challenge.icon}</span>
           <div className="flex-1">
@@ -191,7 +186,6 @@ export default function ChallengeView() {
           )}
         </div>
 
-        {/* Sections */}
         <div className="space-y-3 mb-8">
           {sections.map((section) => section.content && (
             <Card key={section.key} className="bg-white border-[#2E5C6E]/20">
@@ -221,7 +215,6 @@ export default function ChallengeView() {
           ))}
         </div>
 
-        {/* Daily Execution */}
         <Card className="bg-white border-[#2E5C6E]/20 mb-6">
           <CardHeader>
             <CardTitle className="text-[#1E1E1E]">Daily Execution</CardTitle>
@@ -265,114 +258,123 @@ export default function ChallengeView() {
           </CardContent>
         </Card>
 
-        {/* Thought Offering */}
-        {challenge.thought_offering && (
-          <Card className="bg-[#FAFBF9] border-[#C6A85E]/30">
-            <CardContent className="p-6">
-              <p className="text-[#1E1E1E] italic leading-relaxed">{challenge.thought_offering}</p>
+        {progress?.personal_notes && (
+          <Card className="bg-white border-[#2E5C6E]/20 mb-6">
+            <CardHeader>
+              <CardTitle className="text-[#1E1E1E]">Your Notes</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-[#1E1E1E] whitespace-pre-wrap">{progress.personal_notes}</p>
             </CardContent>
           </Card>
         )}
 
-        {/* Code Name Dialog */}
+        {progress && (
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setNotes(progress?.personal_notes || '');
+                setShowNotesDialog(true);
+              }}
+            >
+              Add / Edit Notes
+            </Button>
+          </div>
+        )}
+
         <Dialog open={showCodeNameDialog} onOpenChange={setShowCodeNameDialog}>
-          <DialogContent className="bg-white">
+          <DialogContent>
             <DialogHeader>
-              <DialogTitle className="text-black">Create Your Code Name</DialogTitle>
+              <DialogTitle>Set your code name</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <p className="text-sm text-[#2E5C6E]">
-                For your privacy, create a code name for this challenge. This is what you'll see in notifications.
-              </p>
               <Input
                 value={codeName}
                 onChange={(e) => setCodeName(e.target.value)}
-                placeholder="e.g., Project Shield, Level Up"
+                placeholder="Enter code name"
               />
-              <Button onClick={confirmStart} className="w-full bg-[#0CC0DF] hover:bg-[#0AB0CF] text-white">
-                Start Journey
+              <Button
+                onClick={confirmStart}
+                disabled={!codeName.trim() || startMutation.isPending}
+                className="w-full bg-[#0CC0DF] hover:bg-[#0AB0CF] text-white"
+              >
+                {startMutation.isPending ? 'Starting...' : 'Start'}
               </Button>
             </div>
           </DialogContent>
         </Dialog>
 
-        {/* Edit Code Name Dialog */}
         <Dialog open={showEditCodeNameDialog} onOpenChange={setShowEditCodeNameDialog}>
-          <DialogContent className="bg-white">
+          <DialogContent>
             <DialogHeader>
-              <DialogTitle className="text-black">Edit Code Name</DialogTitle>
+              <DialogTitle>Edit code name</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <p className="text-sm text-[#2E5C6E]">
-                Update the private code name for this challenge.
-              </p>
               <Input
                 value={editCodeName}
                 onChange={(e) => setEditCodeName(e.target.value)}
-                placeholder="e.g., Project Shield, Level Up"
+                placeholder="Enter code name"
               />
-              <Button onClick={handleSaveCodeName} className="w-full bg-[#0CC0DF] hover:bg-[#0AB0CF] text-white">
-                Save Code Name
+              <Button
+                onClick={handleSaveCodeName}
+                disabled={!editCodeName.trim() || updateProgressMutation.isPending}
+                className="w-full bg-[#0CC0DF] hover:bg-[#0AB0CF] text-white"
+              >
+                {updateProgressMutation.isPending ? 'Saving...' : 'Save'}
               </Button>
             </div>
           </DialogContent>
         </Dialog>
 
-        {/* Day Detail Dialog */}
-        <Dialog open={!!selectedDay} onOpenChange={() => setSelectedDay(null)}>
-          <DialogContent className="bg-white max-w-2xl max-h-[90vh] overflow-y-auto">
-            {selectedDay && days.find(d => d.day_number === selectedDay) && (
-              <>
-                <DialogHeader>
-                  <DialogTitle className="text-black">Day {selectedDay}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  {(() => {
-                    const day = days.find(d => d.day_number === selectedDay);
-                    return (
-                      <>
-                        <div>
-                          <h4 className="font-medium text-[#1E1E1E] mb-2">Goal</h4>
-                          <p className="text-[#2E5C6E] leading-relaxed">{day.goal}</p>
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-[#1E1E1E] mb-2">Today's Task</h4>
-                          <p className="text-[#1E1E1E] leading-relaxed">{day.daily_task}</p>
-                        </div>
-                        {day.example && (
-                          <div>
-                            <h4 className="font-medium text-[#1E1E1E] mb-2">Example</h4>
-                            <p className="text-[#2E5C6E] leading-relaxed">{day.example}</p>
-                          </div>
-                        )}
-                        {day.deeper_explanation && (
-                          <details className="border border-[#2E5C6E]/20 rounded-lg p-4">
-                            <summary className="font-medium text-[#1E1E1E] cursor-pointer">Deeper Explanation</summary>
-                            <p className="text-[#2E5C6E] mt-3 leading-relaxed">{day.deeper_explanation}</p>
-                          </details>
-                        )}
-                        {day.thought_offering && (
-                          <div className="bg-[#FAFBF9] p-4 rounded-lg border border-[#C6A85E]/30">
-                            <p className="text-[#1E1E1E] italic">{day.thought_offering}</p>
-                          </div>
-                        )}
-                        {progress && !progress.completed_days?.includes(selectedDay) && (
-                          <Button
-                            onClick={() => {
-                              handleDayComplete(selectedDay);
-                              setSelectedDay(null);
-                            }}
-                            className="w-full bg-[#0CC0DF] hover:bg-[#0AB0CF] text-white"
-                          >
-                            Mark Complete
-                          </Button>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              </>
-            )}
+        <Dialog open={showNotesDialog} onOpenChange={setShowNotesDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Your notes</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <Textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Write your thoughts here..."
+                rows={6}
+              />
+              <Button
+                onClick={handleSaveNotes}
+                disabled={updateProgressMutation.isPending}
+                className="w-full bg-[#0CC0DF] hover:bg-[#0AB0CF] text-white"
+              >
+                {updateProgressMutation.isPending ? 'Saving...' : 'Save notes'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!selectedDay} onOpenChange={(open) => !open && setSelectedDay(null)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>
+                Day {selectedDay}: {days.find(d => d.day_number === selectedDay)?.title || 'Execution'}
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <p className="text-[#1E1E1E] whitespace-pre-wrap">
+                {days.find(d => d.day_number === selectedDay)?.content || 'No content yet.'}
+              </p>
+
+              {progress && !progress.completed_days?.includes(selectedDay) && progress.current_day === selectedDay && (
+                <Button
+                  onClick={() => {
+                    handleDayComplete(selectedDay);
+                    setSelectedDay(null);
+                  }}
+                  className="w-full bg-[#0CC0DF] hover:bg-[#0AB0CF] text-white"
+                >
+                  Mark Day as Complete
+                </Button>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
       </div>
