@@ -42,9 +42,9 @@ jobs:
       - name: Force Android SDK versions
         run: |
           if [ -f android/variables.gradle ]; then
-            sed -i 's/compileSdkVersion = .*/compileSdkVersion = 35/' android/variables.gradle
-            sed -i 's/targetSdkVersion = .*/targetSdkVersion = 35/' android/variables.gradle
-            sed -i 's/minSdkVersion = .*/minSdkVersion = 23/' android/variables.gradle || true
+            sed -i 's/compileSdkVersion = .*/compileSdkVersion = 36/' android/variables.gradle
+            sed -i 's/targetSdkVersion = .*/targetSdkVersion = 36/' android/variables.gradle
+            sed -i 's/minSdkVersion = .*/minSdkVersion = 24/' android/variables.gradle || true
             cat android/variables.gradle
           fi
 
