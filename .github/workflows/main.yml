@@ -1,4 +1,4 @@
-name: Build Android App Bundle
+name: Build Android AAB and APK
 
 on:
   workflow_dispatch:
@@ -68,6 +68,19 @@ jobs:
                   }
               }
           }
+          EOF
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/release.jks
+
+      - name: Create key.properties
+        run: |
+          cat > android/key.properties <<EOF
+          storeFile=release.jks
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
           EOF
 
       - name: Sync Capacitor
